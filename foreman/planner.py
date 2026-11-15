@@ -338,7 +338,7 @@ def plan_with_return(farm: Farm, road_map: RoadMap, world: WorldState, previous:
         state = world.tractors[tractor_id]
         hopeful.tractors[tractor_id] = TractorState(tractor_id, state.node, back_at, state.fuel,
                                                     state.mounted, available=True)
-    wait_options = {**options, "change_cost": CHANGE_LIGHT}
+    wait_options = {**options, "change_cost": stability_cost(strict=False)}
     wait = plan(farm, road_map, hopeful, _own_work_back(move, returning, had or {}),
                 **wait_options)
     # Both are scored in the same world (the tractor counted in from its return
