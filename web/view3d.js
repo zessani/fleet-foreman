@@ -976,9 +976,14 @@ function updateTractors(dt, iconScale, time) {
     view.target.copy(P(t.x, t.y));
     view.targetHeading = THREE.MathUtils.degToRad(t.heading || 0);
     const group = standing[t.node] || [];
-    if (group.length > 1 && group.includes(t.id)) {
+    if (t.status !== "traveling" && t.status !== "working" && view.workSpot && view.workSpot.node === t.node) {
+      // It stopped in this field (broke down, or finished): it stays where it stopped.
+      view.target.copy(view.workSpot.pos);
+      view.targetHeading = view.workSpot.heading;
+    } else if (group.length > 1 && group.includes(t.id)) {
       view.target.z += (group.indexOf(t.id) - (group.length - 1) / 2) * 0.75 * iconScale;
     }
+    if (t.status === "traveling") view.workSpot = null;
 
     if (t.status === "working" && job && fields[job.field]) {
       // Inside the field: on the pass that the job's percent done puts it on.
@@ -987,6 +992,7 @@ function updateTractors(dt, iconScale, time) {
       const x = -field.side / 2 + st.x, z = -field.side / 2 + st.top + st.passWidth / 2;
       view.target.set(field.mesh.position.x + x, 0, field.mesh.position.z + z);
       view.targetHeading = st.east ? 0 : Math.PI;
+      view.workSpot = { node: job.field, pos: view.target.clone(), heading: view.targetHeading };
       working = true;
     }
     if (!view.pos) { view.pos = view.target.clone(); view.heading = view.targetHeading; }
