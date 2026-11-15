@@ -177,8 +177,16 @@ let overview = { target: new THREE.Vector3(), position: new THREE.Vector3(0, 400
 const P = (x, y, h = 0) => new THREE.Vector3(x * U, h, -y * U);   // farm km -> scene
 const nodePos = (id, h = 0) => P(nodes[id].x, nodes[id].y, h);
 
+// The farm file gives each field a centre and an area, and no outline. So a
+// block is drawn as a square of exactly that area, centred on its node and
+// lined up north-south. A pivot field (shape "pivot", or "Pivot" in its name)
+// is drawn as a circle of exactly that area.
+function isPivot(node) {
+  return node.shape === "pivot" || /pivot/i.test(node.name || "");
+}
 function fieldSide(node) {
-  return Math.sqrt(Math.max(0.1, node.area_ha || 1) * 10000) * M;   // a square of the true area
+  const squareMetres = Math.max(0.1, node.area_ha || 1) * 10000;
+  return (isPivot(node) ? 2 * Math.sqrt(squareMetres / Math.PI) : Math.sqrt(squareMetres)) * M;   // width of its outline
 }
 
 function drawCrop(g, S, crop) {
@@ -219,11 +227,12 @@ function buildFarm(farm) {
     const texture = new THREE.CanvasTexture(cv);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(side, side), new THREE.MeshLambertMaterial({ map: texture, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -80 }));
+    const round = isPivot(node);
+    const mesh = new THREE.Mesh(round ? new THREE.CircleGeometry(side / 2, 96) : new THREE.PlaneGeometry(side, side), new THREE.MeshLambertMaterial({ map: texture, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -80 }));
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.copy(P(node.x, node.y, 0.02));
     mesh.receiveShadow = true;
-    const flash = new THREE.Mesh(new THREE.PlaneGeometry(side * 1.06, side * 1.06),
+    const flash = new THREE.Mesh(round ? new THREE.CircleGeometry(side * 0.53, 64) : new THREE.PlaneGeometry(side * 1.06, side * 1.06),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
     flash.renderOrder = 3;
     flash.rotation.x = -Math.PI / 2;
@@ -236,7 +245,8 @@ function buildFarm(farm) {
     label.position.set(0, 0, 0.4);
     mesh.add(label);
     world.add(mesh, flash);
-    fields[node.id] = { node, side, mesh, ctx, base, texture, key: "", flash, flashT: 0, S };
+    fields[node.id] = { node, side, round, radius: side / 2, mesh, ctx, base, texture, key: "", flash, flashT: 0, S };
+    if (round) { baseCtx.strokeStyle = "#5b4630"; baseCtx.lineWidth = 6; baseCtx.beginPath(); baseCtx.arc(S / 2, S / 2, S / 2 - 3, 0, 7); baseCtx.stroke(); ctx.drawImage(base, 0, 0); }
   }
 
   world.add(barrierGroup);
@@ -247,7 +257,7 @@ function buildFarm(farm) {
     const keepOut = [];
     for (const node of farm.nodes) {
       const p = P(node.x, node.y);
-      keepOut.push({ x: p.x, z: p.z, r: node.kind === "field" ? fieldSide(node) * 0.75 + 2 : 14 });
+      keepOut.push({ x: p.x, z: p.z, r: node.kind === "field" ? fieldSide(node) * 0.75 + 2 : 14 });   // covers a square's corners
     }
     for (const [a, b] of farm.roads || []) {
       if (!nodes[a] || !nodes[b]) continue;
@@ -633,20 +643,64 @@ function setImplement(view, id, catalog) {
 
 const shown = {};      // job id -> percent drawn, eased toward the reported percent
 
-// Where the tractor is after covering `pct` of a square field in back-and-forth passes
-// of the implement's width. Returns the passes done and the position on the current one.
-function passState(side, widthM, pct) {
-  const w = Math.max(0.05, widthM * M);
-  const count = Math.ceil(side / w - 1e-9);
-  let area = clamp(pct, 0, 100) / 100 * side * side;
-  for (let i = 0; i < count; i++) {
-    const passWidth = Math.min(w, side - i * w), passArea = passWidth * side;
-    if (area < passArea - 1e-9 || i === count - 1) {
-      return { w, count, pass: i, along: clamp(area / passArea, 0, 1) * side, passWidth };
-    }
-    area -= passArea;
+// Passes run east-west, one implement width apart, from the north edge down,
+// turning at each end. On a pivot circle each pass is the chord strip at that
+// position. The share of the outline's area covered equals the job's percent.
+
+// Area of one pass strip of a circle that lies west of `front` (centre origin).
+function stripArea(radius, yA, yB, front) {
+  const n = 24;
+  let sum = 0;
+  for (let k = 0; k < n; k++) {
+    const y = yA + (k + 0.5) * (yB - yA) / n, c = Math.sqrt(Math.max(0, radius * radius - y * y));
+    sum += clamp(front + c, 0, 2 * c);
   }
-  return { w, count, pass: count - 1, along: side, passWidth: w };
+  return sum * (yB - yA) / n;
+}
+
+// How far a full pass reaches, as [west, east] measured from the outline's west edge.
+function passSpan(field, i, w) {
+  if (!field.round) return [0, field.side];
+  const r = field.radius, yA = -r + i * w, yB = Math.min(r, yA + w);
+  const near = yA > 0 ? yA : yB < 0 ? yB : 0, half = Math.sqrt(Math.max(0, r * r - near * near));
+  return [r - half, r + half];
+}
+
+// Where the work stands after `pct` percent: the pass it is on, the painted part
+// of that pass (from, to), and the tractor's x. All measured from the west edge.
+function passState(field, widthM, pct) {
+  const side = field.side, w = Math.max(0.05, widthM * M), count = Math.ceil(side / w - 1e-9);
+  const share = clamp(pct, 0, 100) / 100, r = field.radius;
+  const areas = [];
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    const height = Math.min(w, side - i * w);
+    const a = field.round ? stripArea(r, -r + i * w, -r + i * w + height, r) : height * side;
+    areas.push(a);
+    total += a;
+  }
+  let left = share * total;
+  for (let i = 0; i < count; i++) {
+    if (left < areas[i] - 1e-9 || i === count - 1) {
+      const passWidth = Math.min(w, side - i * w), east = i % 2 === 0, [west, eastEnd] = passSpan(field, i, w);
+      let reach;                                   // distance driven along this pass, from its starting end
+      if (!field.round) reach = clamp(left / areas[i], 0, 1) * side;
+      else {
+        const half = (eastEnd - west) / 2, yA = -r + i * w;
+        let lo = -half, hi = half;
+        for (let k = 0; k < 22; k++) {
+          const mid = (lo + hi) / 2;
+          if (stripArea(r, yA, yA + passWidth, mid) < left) lo = mid; else hi = mid;
+        }
+        reach = left >= areas[i] ? 2 * half : (lo + hi) / 2 + half;
+      }
+      return { w, pass: i, top: i * w, passWidth, east,
+               from: east ? west : eastEnd - reach, to: east ? west + reach : eastEnd,
+               x: east ? west + reach : eastEnd - reach };
+    }
+    left -= areas[i];
+  }
+  return { w, pass: 0, top: 0, passWidth: w, east: true, from: 0, to: 0, x: 0 };
 }
 
 const STRIPE = {
@@ -671,15 +725,17 @@ function paintField(field, jobs, catalog, planImplement) {
     const pct = shown[job.id] ?? job.pct;
     if (pct <= 0) continue;
     const width = (catalog[planImplement[job.id]] || {}).width || FALLBACK_WIDTH[job.type] || 6;
-    const st = passState(field.side, width, pct), draw = STRIPE[job.type] || STRIPE.till;
+    const st = passState(field, width, pct), draw = STRIPE[job.type] || STRIPE.till;
     for (let i = 0; i <= st.pass; i++) {
       const y = i * st.w * px, h = Math.min(st.w, field.side - i * st.w) * px;
-      const len = (i < st.pass ? field.side : st.along) * px;
-      if (len <= 0) continue;
-      draw(g, i % 2 === 0 ? 0 : S - len, y, len, h, i);     // even passes run west to east
+      const [from, to] = i < st.pass ? passSpan(field, i, st.w) : [st.from, st.to];
+      if (to - from <= 0) continue;
+      draw(g, from * px, y, (to - from) * px, h, i);
     }
   }
-  g.strokeStyle = "#5b4630"; g.lineWidth = 6; g.strokeRect(3, 3, S - 6, S - 6);
+  g.strokeStyle = "#5b4630"; g.lineWidth = 6;
+  if (field.round) { g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 3, 0, 7); g.stroke(); }
+  else g.strokeRect(3, 3, S - 6, S - 6);
   field.texture.needsUpdate = true;
 }
 
@@ -915,12 +971,10 @@ function updateTractors(dt, iconScale, time) {
     if (t.status === "working" && job && fields[job.field]) {
       // Inside the field: on the pass that the job's percent done puts it on.
       const field = fields[job.field], width = (view.spec || {}).width || FALLBACK_WIDTH[job.type] || 6;
-      const st = passState(field.side, width, shown[job.id] ?? job.pct);
-      const east = st.pass % 2 === 0;
-      const x = -field.side / 2 + (east ? st.along : field.side - st.along);
-      const z = -field.side / 2 + st.pass * st.w + st.passWidth / 2;
+      const st = passState(field, width, shown[job.id] ?? job.pct);
+      const x = -field.side / 2 + st.x, z = -field.side / 2 + st.top + st.passWidth / 2;
       view.target.set(field.mesh.position.x + x, 0, field.mesh.position.z + z);
-      view.targetHeading = east ? 0 : Math.PI;
+      view.targetHeading = st.east ? 0 : Math.PI;
       working = true;
     }
     if (!view.pos) { view.pos = view.target.clone(); view.heading = view.targetHeading; }
@@ -1044,6 +1098,8 @@ function updateCard() {
   $("card-fuel-bar").style.width = `${clamp(t.fuel_pct, 0, 100)}%`;
   $("card-fuel-bar").style.background = t.fuel_pct < 25 ? "var(--danger)" : t.fuel_pct < 60 ? "var(--accent)" : "var(--good)";
 }
+
+window.foremanView = { camera, controls, scene, overview };   // for inspection from the browser console
 
 const timer = new THREE.Clock();
 function frame() {
