@@ -18,6 +18,9 @@ from foreman.model import Farm
 from foreman.nav import RoadMap
 from foreman.state import Plan, WorldState
 
+MAX_SEARCH_PASSES = 50  # a stop so a re-plan always returns quickly
+MIN_GAIN = 1e-6         # ignore "improvements" that are only rounding noise
+
 
 def plan(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None = None,
          speed_factor: SpeedFactor | None = None, local_search: bool = True) -> Plan:
@@ -120,7 +123,67 @@ def _best_slot_per_tractor(evaluator: Evaluator, order: Order, locked: dict[str,
 
 
 def _improve(evaluator: Evaluator, order: Order, locked: dict[str, int]) -> None:
-    """Local search. Added after the first full day runs end to end."""
+    """Local search: keep applying the best single move until none helps.
+
+    Two moves are tried: move one job to any other position on any capable
+    tractor, and swap two jobs. Locked work in progress is never touched.
+    """
+    cost = evaluator.cost(order)
+    if cost is None:
+        return
+    for _ in range(MAX_SEARCH_PASSES):
+        relocate = _best_relocate(evaluator, order, locked, cost)
+        swap = _best_swap(evaluator, order, locked, cost)
+        if relocate is None and swap is None:
+            return
+        if swap is None or (relocate is not None and relocate[0] <= swap[0]):
+            cost, source, i, target, j = relocate
+            order[target].insert(j, order[source].pop(i))
+        else:
+            cost, first, i, second, j = swap
+            order[first][i], order[second][j] = order[second][j], order[first][i]
+
+
+def _best_relocate(evaluator: Evaluator, order: Order, locked: dict[str, int],
+                   cost_now: float) -> tuple[float, str, int, str, int] | None:
+    """The cheapest "move one job elsewhere", if it beats the current cost."""
+    best: tuple[float, str, int, str, int] | None = None
+    threshold = cost_now - MIN_GAIN
+    for source in evaluator.tractor_ids:
+        for i in range(locked[source], len(order[source])):
+            job_id = order[source].pop(i)
+            for target in evaluator.capable_tractors(job_id):
+                for j in range(locked[target], len(order[target]) + 1):
+                    if target == source and j == i:
+                        continue  # that is where it already was
+                    order[target].insert(j, job_id)
+                    cost = evaluator.cost(order)
+                    del order[target][j]
+                    if cost is not None and cost < threshold:
+                        best, threshold = (cost, source, i, target, j), cost
+            order[source].insert(i, job_id)
+    return best
+
+
+def _best_swap(evaluator: Evaluator, order: Order, locked: dict[str, int],
+               cost_now: float) -> tuple[float, str, int, str, int] | None:
+    """The cheapest "exchange two jobs", if it beats the current cost."""
+    best: tuple[float, str, int, str, int] | None = None
+    threshold = cost_now - MIN_GAIN
+    slots = [(tractor_id, i) for tractor_id in evaluator.tractor_ids
+             for i in range(locked[tractor_id], len(order[tractor_id]))]
+    for a, (first, i) in enumerate(slots):
+        for second, j in slots[a + 1:]:
+            job_a, job_b = order[first][i], order[second][j]
+            if first != second and not (evaluator.can_do(first, job_b)
+                                        and evaluator.can_do(second, job_a)):
+                continue
+            order[first][i], order[second][j] = job_b, job_a
+            cost = evaluator.cost(order)
+            order[first][i], order[second][j] = job_a, job_b
+            if cost is not None and cost < threshold:
+                best, threshold = (cost, first, i, second, j), cost
+    return best
 
 
 def no_tractor_reason(farm: Farm, world: WorldState, job_id: str) -> str:

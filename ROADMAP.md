@@ -31,7 +31,7 @@ Done when: the sample farm runs a full day, every job finishes, no rule
 is broken, and we beat "first come, first served".
 
 ### Zayyan
-- [ ] Planner (starts from the current state)
+- [x] Planner (starts from the current state)
 - [x] Simulation loop
 - [x] "First come, first served" baseline
 

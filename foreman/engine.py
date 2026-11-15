@@ -193,6 +193,26 @@ class Engine:
                 "baseline": self.baseline.block(),
             }
 
+    def report(self) -> dict:
+        """Foreman against the baseline: same farm, same clock, same events."""
+        with self._lock:
+            foreman, baseline = self.foreman.sim.totals(), self.baseline.sim.totals()
+            return {
+                "scenario": self.scenario,
+                "farm": self.farm.name,
+                "clock": clock(self.farm.day_start_min, self.now),
+                "finished": self.finished,
+                "jobs": len(self.farm.jobs),
+                "foreman": foreman,
+                "baseline": baseline,
+                "difference": {key: round(foreman[key] - baseline[key], 1) for key in foreman},
+                "plan_ms": round(self.foreman.plan.ms, 1) if self.foreman.plan else None,
+            }
+
+    def log_lines(self) -> list[dict]:
+        with self._lock:
+            return list(self.log)
+
     def _submit_jobs(self) -> None:
         """The jobs_submitted event: plan both worlds from the start of the day."""
         new_plan = self.foreman.replan()

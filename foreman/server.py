@@ -6,6 +6,7 @@ The endpoints are listed in CLAUDE.md section 8c.
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -15,6 +16,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from foreman.engine import SCENARIO_DIR, Engine
@@ -50,6 +52,18 @@ app = FastAPI(title="Foreman", lifespan=lifespan)
 @app.get("/api/state")
 def get_state() -> dict:
     return engine.state()
+
+
+@app.get("/api/report")
+def get_report() -> dict:
+    """Comparison against the baseline: jobs done, on time, travel, idle, violations."""
+    return engine.report()
+
+
+@app.get("/api/log", response_class=PlainTextResponse)
+def get_log() -> str:
+    """The event log as JSON Lines, one decision per line. This is the hand-in log."""
+    return "".join(json.dumps(line) + "\n" for line in engine.log_lines())
 
 
 @app.post("/api/control")
