@@ -251,6 +251,18 @@ class TractorAdapter(Protocol):
 }
 ```
 
+Shapes inside the state
+- Job `status`: `pending | active | done | held`. A half-done job waiting for
+  a new tractor is `pending` with its `pct` kept.
+- Tractor `status`: `idle | traveling | servicing | working | waiting | broken`.
+- `explanation.changes`: a list of plain sentences, one per changed job.
+- `safety.checks[]`: `{id, name, passed, severity, detail}`. `id` is the rule
+  number from section 12. `severity` is `hard` or `warning`.
+- `log[]`: `{t, clock, agent, event, message}`. `t` is minutes from the start
+  of the day. `agent` is one of the six agent names.
+- `speed` is simulated minutes per real second: 1, 4, 16, or 60.
+- Job and implement `type` values: `spray | mow | till | plant`.
+
 Other endpoints
 - `POST /api/control` with `{action: start|pause|reset, speed}`
 - `POST /api/scenario` with `{name}` to load a farm file

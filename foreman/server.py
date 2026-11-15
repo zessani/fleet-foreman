@@ -1,12 +1,15 @@
 """Foreman API server and static host for the dashboard.
 
 Run with:  python -m foreman.server   then open http://localhost:8000
-
-Phase 0: /api/state returns fake data in the final shape (CLAUDE.md section
-8c) and the two POST endpoints accept anything, so the dashboard can be built
-before the engine exists.
+The endpoints are listed in CLAUDE.md section 8c.
 """
 
+from __future__ import annotations
+
+import re
+import threading
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -14,30 +17,65 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from foreman.fake_state import fake_state
+from foreman.engine import SCENARIO_DIR, Engine
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 HOST = "127.0.0.1"
 PORT = 8000
+TICK_SECONDS = 0.1
 
-app = FastAPI(title="Foreman")
+engine = Engine()
+
+
+def _clock_loop(stop: threading.Event) -> None:
+    """Move simulated time forward in step with real time."""
+    last = time.monotonic()
+    while not stop.wait(TICK_SECONDS):
+        current = time.monotonic()
+        engine.tick(current - last)
+        last = current
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    stop = threading.Event()
+    threading.Thread(target=_clock_loop, args=(stop,), daemon=True).start()
+    yield
+    stop.set()
+
+
+app = FastAPI(title="Foreman", lifespan=lifespan)
 
 
 @app.get("/api/state")
 def get_state() -> dict:
-    return fake_state()
+    return engine.state()
 
 
 @app.post("/api/control")
 def post_control(body: dict[str, Any]) -> dict:
-    """Stub. Will take {action: start|pause|reset, speed}."""
-    return {"ok": True, "received": body}
+    """{action: start|pause|reset, speed: 1|4|16|60}. Both keys are optional."""
+    return engine.control(body.get("action"), body.get("speed"))
+
+
+@app.post("/api/scenario")
+def post_scenario(body: dict[str, Any]) -> dict:
+    """{name}: load scenarios/<name>.json and reset the day."""
+    name = str(body.get("name", ""))
+    # Names only, so a request cannot reach files outside scenarios/.
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        return {"ok": False, "error": "name must be letters, digits, - or _"}
+    path = SCENARIO_DIR / f"{name}.json"
+    if not path.exists():
+        return {"ok": False, "error": f"no scenario named {name}"}
+    engine.load(path)
+    return {"ok": True, "scenario": name}
 
 
 @app.post("/api/event")
 def post_event(body: dict[str, Any]) -> dict:
-    """Stub. Will take {type: breakdown|repair|block_road|open_road|set_priority|add_job, ...}."""
-    return {"ok": True, "received": body}
+    """Stub until Phase 2: {type: breakdown|repair|block_road|open_road|set_priority|add_job}."""
+    return {"ok": True, "received": body, "applied": False}
 
 
 # Mounted last so the /api routes above win over the static files.

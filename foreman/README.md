@@ -2,9 +2,13 @@
 
 Owner: Zayyan
 
-Planner, simulation, agents, memory, safety and server. `server.py` is the entry point (`python -m foreman.server`). `fake_state.py` is placeholder data and is replaced in Phase 1. `adapter.py` is the tractor interface from CLAUDE.md section 8b.
+Planner, simulation, agents, memory, safety and server.
 
-Phase items (CLAUDE.md section 14):
-- Phase 1: planner, simulation loop, baseline.
-- Phase 2: breakdown recovery, Safety gate, six named agents with a log, plain-language explanation of each re-plan.
-- Phase 3: learning loop, LLM layer, "Why?" for any job.
+- `server.py`: entry point (`python -m foreman.server`) and the API of CLAUDE.md section 8c.
+- `engine.py`: runs the Foreman world and the baseline world on one clock and builds the dashboard state.
+- `model.py`: farm data model, loader, and the formulas of section 10.
+- `state.py`: world state and plan types.
+- `evaluator.py`: exact timing and cost of a set of routes.
+- `planner.py`: the Foreman planner. `baseline.py`: first come, first served.
+- `sim.py`: simulated tractors behind the interface in `adapter.py`, plus the referee.
+- `nav/`: road routing (Ahmed).

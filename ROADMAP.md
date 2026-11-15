@@ -32,8 +32,8 @@ is broken, and we beat "first come, first served".
 
 ### Zayyan
 - [ ] Planner (starts from the current state)
-- [ ] Simulation loop
-- [ ] "First come, first served" baseline
+- [x] Simulation loop
+- [x] "First come, first served" baseline
 
 ### Ahmed
 - [ ] Shortest routes and travel times
