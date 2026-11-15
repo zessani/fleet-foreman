@@ -1,4 +1,4 @@
-# Foreman
+# FleetForeman
 
 ## For the judges
 
@@ -12,9 +12,9 @@
 | How to run it | [Run it](#run-it) |
 | Simulation used | Our own simulation; one tractor can also run in AgOpenWeb ([details](#agopenweb)) |
 
-**Demo day** (sample farm: 3 tractors, 10 jobs, Cedar breaks down at 09:30). Foreman against first come, first served, on the same farm, clock and events. Both obey the same rules.
+**Demo day** (sample farm: 3 tractors, 10 jobs, Cedar breaks down at 09:30). FleetForeman against first come, first served, on the same farm, clock and events. Both obey the same rules.
 
-| | Foreman | First come, first served |
+| | FleetForeman | First come, first served |
 | --- | ---: | ---: |
 | Jobs completed | 10 of 10 | 10 of 10 |
 | Jobs on time | 10 | 10 |
@@ -25,7 +25,7 @@
 
 **196 test days** (6 farms, each run quiet and with every tractor breaking at 10 different times):
 
-| | Foreman | First come, first served |
+| | FleetForeman | First come, first served |
 | --- | ---: | ---: |
 | Jobs completed | 2,119 | 1,824 |
 | Jobs on time | 1,946 | 1,343 |
@@ -38,9 +38,9 @@ First come, first served finishes more jobs on time on 2 of the 196 days: the ex
 
 ![The dashboard during a breakdown](docs/screenshots/dashboard-breakdown.jpg)
 
-## What Foreman is
+## What FleetForeman is
 
-Foreman decides which tractor does which job, in what order, with which implement.
+FleetForeman decides which tractor does which job, in what order, with which implement.
 When a tractor breaks down, it moves the unfinished work to the others within milliseconds and says why in plain words.
 No person has to approve anything. Every plan is checked against fixed safety rules before it is sent.
 
@@ -92,9 +92,9 @@ flowchart LR
 - AI Safety agent: reviews each plan the safety gate passed. It can warn, hold a job, or ask for one new plan, which must pass the safety gate again. It remembers its earlier warnings and what happened after.
 
 **Learning and self-tune.**
-- Learning: Foreman compares each finished job with its estimate and learns each field's real speed. The estimate error falls from 8.9% on day 1 to 1.1% on day 5 (Time estimates on the dashboard).
+- Learning: FleetForeman compares each finished job with its estimate and learns each field's real speed. The estimate error falls from 8.9% on day 1 to 1.1% on day 5 (Time estimates on the dashboard).
 - Lessons: every breakdown leaves a lesson with the real outcome, which the AI Recovery agent reads next time.
-- Self-tune: at the end of a day Foreman replays past days with nearby planner settings. It adopts a setting only if it wins on the days it tuned on and also on days it did not see. Safety margins can never be tuned.
+- Self-tune: at the end of a day FleetForeman replays past days with nearby planner settings. It adopts a setting only if it wins on the days it tuned on and also on days it did not see. Safety margins can never be tuned.
 
 <a id="agopenweb"></a>**AgOpenWeb.** Every tractor sits behind one interface (`status`, `dispatch`, `stop`), so any tractor can run in AgOpenWeb while the others stay simulated:
 
@@ -117,9 +117,9 @@ Details: [ARCHITECTURE.md](ARCHITECTURE.md) and [bridge/README.md](bridge/README
 ## Known limits
 
 - First come, first served does better on 2 of the 196 test days on on-time jobs, and on 5 days on wasted minutes. The day plan does not hedge against a breakdown.
-- Foreman spends more time at the yard swapping implements than the baseline on the demo day (110 min against 70).
+- FleetForeman spends more time at the yard swapping implements than the baseline on the demo day (110 min against 70).
 - Two tractors may meet on the same road; only sharing a field is ruled out. A road rule is designed but not finished.
-- In AgOpenWeb a tractor moves and Foreman follows it, but it does not yet work a real field: that needs a field and guidance line prepared in AgOpenWeb. Only one AgOpenWeb copy runs per computer.
+- In AgOpenWeb a tractor moves and FleetForeman follows it, but it does not yet work a real field: that needs a field and guidance line prepared in AgOpenWeb. Only one AgOpenWeb copy runs per computer.
 - A planner step that hedges against breakdowns has a mixed effect: on 596 days it changed 80 day plans, 15 ended better and 35 worse (`python -m foreman.resilience_report`).
 - Self-tune found a gain on 1 of 4 farms tested, in wasted minutes only.
 - All results are from simulation. Weather and terrain are not modelled.
