@@ -34,9 +34,12 @@ def test_panel_reads_only_fields_the_state_has() -> None:
 def test_panel_names_roles_for_what_they_are_and_shows_ai_agents() -> None:
     script = (PANELS / "decisions.js").read_text(encoding="utf-8")
     for text in ("Safety gate", "Activity log", "AI agent thinking",
-                 "Fell back to the rules", "charAt(0).toUpperCase()", "foreman.ai",
+                 "Foreman carried on with its own rules", "Looked at: ", "foreman.ai",
                  "foreman.reasoning", "prefers-reduced-motion", "@keyframes"):
         assert text in script, text
     assert not re.search(r"(?<!AI )Safety agent", script)
     assert "Agent log" not in script
     assert "coming in Phase 3" not in script
+    # Plain words only: no model name, no raw data and no tool names are shown.
+    assert "ai.model" not in script and "JSON.stringify(answer)" not in script
+    assert 'card("Safety gate", false, true)' in script and 'card("Activity log", true, true)' in script

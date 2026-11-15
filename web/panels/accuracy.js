@@ -96,7 +96,7 @@
     var hero = el("p", "ap-hero", "");
     var sub = el("p", "ap-sub",
       "How far predicted job times were from real ones. Lower is better. " +
-      "Shown in simulation, where hidden real field speeds differ from the catalog.");
+      "Foreman learns each field's real speed from the work it has done.");
     var wrap = el("div", "ap-canvas-wrap");
     var canvas = el("canvas");
     canvas.setAttribute("role", "img");
@@ -150,8 +150,8 @@
 
   function noteFrom(data) {
     if (window.ACCURACY_PANEL_DEMO || !data || !isFinite(data.noise_pct) || !isFinite(data.seed)) return "";
-    return "Simulated: hidden field speeds 10 to 25% off the catalog rate, " + data.noise_pct +
-      "% day-to-day variation, seed " + data.seed + ".";
+    return "A practice run: each field really works 10 to 25% faster or slower than the book says, " +
+      "and varies " + data.noise_pct + "% from day to day.";
   }
 
   function render(data) {

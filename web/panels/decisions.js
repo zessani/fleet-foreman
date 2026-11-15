@@ -34,10 +34,16 @@
   };
   const AI_COLOR = "#f2f7f3";
   const STATUS = {
-    thinking: ["THINKING", "dp-st-think"], done: ["DONE", "dp-st-done"],
-    fallback: ["FELL BACK TO RULES", "dp-st-fail"],
+    thinking: ["Thinking", "dp-st-think"], done: ["Answered", "dp-st-done"],
+    fallback: ["No answer", "dp-st-fail"],
   };
-  const ACTION_TAGS = { warn: "WARN", hold_job: "HOLD JOB", request_replan: "RE-PLAN" };
+  const ACTION_TAGS = { warn: "Warning", hold_job: "Hold this job", request_replan: "Asked for a new plan" };
+  // What each thing an AI agent can look up is, in plain words.
+  const LOOKED_AT = {
+    tractor_status: "the tractor's state", jobs_at_risk: "the jobs it had", past_lessons: "lessons from earlier faults",
+    plan_summary: "the plan", tractor_history: "each tractor's day so far", recent_log: "the latest activity",
+    past_concerns: "its own earlier warnings",
+  };
 
   // Sizes come from the box the panel sits in (container queries), so it also
   // works in a narrow sidebar and not only at full page width.
@@ -47,7 +53,7 @@
   --dp-muted: #9fb0a5; --dp-accent: #dfe7e2; --dp-good: #dfe7e2; --dp-bad: #ef6d68;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--dp-text);
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px; box-sizing: border-box; }
+  gap: 12px; box-sizing: border-box; align-items: start; }
 @container (max-width: 760px) {
   .dp { grid-template-columns: minmax(0, 1fr); }
   .dp-log-line { grid-template-columns: 4.2em minmax(0, 1fr); }
@@ -61,6 +67,19 @@
 .dp-title { margin: 0 0 10px; font-size: clamp(12px, 1.1cqi, 15px); font-weight: 700;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--dp-muted);
   display: flex; justify-content: space-between; gap: 12px; }
+/* A folded card shows its title and a one-line result; a click opens the rest. */
+.dp-fold > summary { cursor: pointer; margin: 0; list-style: none; align-items: baseline; }
+.dp-fold > summary::-webkit-details-marker { display: none; }
+.dp-fold > summary > span:first-child { white-space: nowrap; }
+.dp-fold > summary > span:first-child::before { content: "\\25B8"; display: inline-block; width: 1.3em; }
+.dp-fold[open] > summary > span:first-child::before { content: "\\25BE"; }
+.dp-fold[open] > summary { margin-bottom: 10px; }
+.dp-fold-note { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--dp-text);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-fold-note.dp-note-bad { color: var(--dp-bad); }
+.dp-each { margin: 0; }
+.dp-each > summary { cursor: pointer; color: var(--dp-muted); font-size: clamp(14px, 1.4cqi, 19px);
+  padding: 4px 0; }
 .dp-headline { font-size: clamp(20px, 2.4cqi, 34px); font-weight: 700; line-height: 1.2;
   margin: 0 0 8px; }
 .dp-summary { font-size: clamp(16px, 1.7cqi, 24px); margin: 0 0 12px; }
@@ -125,14 +144,20 @@
     return node;
   }
 
-  function card(title, wide) {
-    const box = el("section", "dp-card" + (wide ? " dp-wide" : ""));
-    const heading = el("h2", "dp-title");
+  // folded: the card starts closed and opens like a dropdown. Its note stays visible
+  // while it is closed, so the result can be read without opening it.
+  function card(title, wide, folded) {
+    const box = el(folded ? "details" : "section",
+                   "dp-card" + (wide ? " dp-wide" : "") + (folded ? " dp-fold" : ""));
+    const heading = el(folded ? "summary" : "h2", "dp-title");
     const name = el("span", null, title);
-    const note = el("span");
+    const note = el("span", folded ? "dp-fold-note" : null);
     heading.append(name, note);
     box.append(heading);
-    return { box, note };
+    if (!folded) return { box, note, body: box };
+    const body = el("div");
+    box.append(body);
+    return { box, note, body };
   }
 
   function build() {
@@ -156,31 +181,35 @@
     const summary = el("p", "dp-summary");
     const chips = el("div", "dp-chips");
     const changes = el("ul", "dp-list");
-    change.box.append(headline, summary, chips, changes);
+    const each = el("details", "dp-each");
+    const eachTitle = el("summary");
+    each.append(eachTitle, changes);
+    change.box.append(headline, summary, chips, each);
 
     const tune = card("Planner self-tune", true);
     const tuneText = el("p", "dp-summary");
     tune.box.append(tuneText);
     tune.box.hidden = true;
 
-    const safety = card("Safety gate");
+    const safety = card("Safety gate", false, true);
     const badge = el("div", "dp-badge dp-none", "NOT CHECKED YET");
     const safetyLine = el("p", "dp-line");
     const checks = el("div");
-    safety.box.append(badge, safetyLine, checks);
+    safety.body.append(badge, safetyLine, checks);
 
     const reasoning = card("AI agents");
     const reasoningBody = el("div");
     reasoning.box.append(reasoningBody);
 
-    const log = card("Activity log", true);
+    const log = card("Activity log", true, true);
     const logBody = el("div", "dp-log");
-    log.box.append(logBody);
+    log.body.append(logBody);
 
     const status = el("div", "dp-status");
     grid.append(change.box, tune.box, safety.box, reasoning.box, log.box, status);
 
-    parts = { tuneBox: tune.box, tuneText, headline, summary, chips, changes, changeNote: change.note, badge, safetyLine,
+    parts = { tuneBox: tune.box, tuneText, headline, summary, chips, changes, each, eachTitle,
+              safetyBox: safety.box, changeNote: change.note, badge, safetyLine,
               checks, safetyNote: safety.note, reasoningBody, reasoningNote: reasoning.note,
               logBody, logNote: log.note, status };
     lastKeys = {};
@@ -216,24 +245,29 @@
       // A job that kept its tractor stayed put, whether or not its times shifted.
       parts.chips.append(chip(moved, moved === 1 ? "job moved" : "jobs moved", moved > 0));
       parts.chips.append(chip(retimed + unchanged, "stayed with their tractor"));
-      if (retimed) parts.chips.append(chip(retimed, "of those retimed"));
+      if (retimed) parts.chips.append(chip(retimed, "of those with new times"));
     } else if (planNo === 1) {
       // The first plan lists one sentence per planned job and one per held job.
       const planned = (story.changes || []).length - (story.held || 0);
       parts.chips.append(chip(planned, "jobs in the first plan of the day"));
     }
-    if (story.held) parts.chips.append(chip(story.held, "held", true));
+    if (story.held) parts.chips.append(chip(story.held, "waiting for a tractor", true));
     if (story.ms != null) {
       const ms = el("span", "dp-chip");
       ms.append(el("b", null, String(story.ms) + " ms"),
-                document.createTextNode(planNo > 1 ? "from event to new plan" : "to plan the day"));
+                document.createTextNode(planNo > 1 ? "to make the new plan" : "to plan the day"));
       parts.chips.append(ms);
     }
 
     parts.changes.textContent = "";
-    (story.changes || []).forEach(function (sentence) {
+    const sentences = story.changes || [];
+    sentences.forEach(function (sentence) {
       parts.changes.append(el("li", null, sentence));
     });
+    // A short list is shown; a long one stays folded until someone asks for it.
+    parts.each.hidden = !sentences.length;
+    parts.each.open = sentences.length > 0 && sentences.length <= 3;
+    parts.eachTitle.textContent = "Each job (" + sentences.length + ")";
   }
 
   function renderTune(foreman) {
@@ -262,12 +296,16 @@
       parts.badge.textContent = "NOT CHECKED YET";
       parts.badge.className = "dp-badge dp-none";
     }
-    parts.safetyNote.textContent = checks.length ? passedCount + " of " + checks.length : "";
+    parts.safetyNote.textContent = safety.passed === true
+      ? "Passed, " + passedCount + " of " + checks.length + " checks"
+      : safety.passed === false ? "Failed, " + hardFailed + " rule(s) broken" : "Not checked yet";
+    parts.safetyNote.classList.toggle("dp-note-bad", safety.passed === false);
+    if (safety.passed === false) parts.safetyBox.open = true;  // a failure is never hidden
     parts.safetyLine.textContent = safety.passed === false
       ? hardFailed + " rule(s) broken. The newest plan was rejected and not sent. Plan " +
         (foreman.plan_no || 0) + " is still in force."
       : safety.passed === true
-        ? "Every plan is checked against the nine rules before it is sent. No human approves it."
+        ? "Every plan is checked against these " + checks.length + " rules before it is sent. No human approves it."
         : "";
 
     parts.checks.textContent = "";
@@ -291,7 +329,7 @@
     const last = lines.length ? lines[lines.length - 1] : null;
     if (!changed("log", JSON.stringify([lines.length, last]))) return;
 
-    parts.logNote.textContent = lines.length ? "newest first" : "";
+    parts.logNote.textContent = last ? last.clock + "  " + last.agent + ": " + last.message : "Nothing yet";
     parts.logBody.textContent = "";
     lines.slice(-LOG_LINES).reverse().forEach(function (line) {
       const row = el("div", "dp-log-line");
@@ -313,10 +351,12 @@
     if (call.agent === "AI Recovery agent" && typeof answer === "object") {
       const down = answer.expected_downtime_min != null ? answer.expected_downtime_min
                  : answer.downtime_min;
-      out.push(line(null, "Severity: " + (answer.severity != null ? answer.severity : "unknown") +
-                          " · Expected downtime: " + (down != null ? down : "unknown") + " min"));
+      const severity = answer.severity != null ? String(answer.severity) : "unknown";
+      const fault = severity.charAt(0).toUpperCase() + severity.slice(1) + " fault. ";
+      out.push(line(null, fault + (answer.out_for_day ? "Out for the rest of the day."
+        : "Expected back in about " + (down != null ? down : "?") + " min.")));
       if (answer.reason) out.push(line(null, String(answer.reason)));
-      if (answer.lesson) out.push(line("dp-detail", "Lesson: " + answer.lesson));
+      if (answer.lesson) out.push(line("dp-detail", "Lesson kept: " + answer.lesson));
     } else if (call.agent === "AI Safety agent" && typeof answer === "object" &&
                Array.isArray(answer.concerns)) {
       if (!answer.concerns.length) {
@@ -325,15 +365,13 @@
         answer.concerns.forEach(function (concern) {
           const row = el("div");
           const action = String(concern.action || "");
-          row.append(el("span", "dp-tag", ACTION_TAGS[action] || action.toUpperCase()));
+          row.append(el("span", "dp-tag", ACTION_TAGS[action] || action));
           const text = concern.concern != null ? concern.concern : concern.text;
           row.append(document.createTextNode((text != null ? String(text) : "") +
                      (concern.job ? " (" + concern.job + ")" : "")));
           out.push(row);
         });
       }
-    } else {
-      out.push(line("dp-detail", JSON.stringify(answer)));
     }
     return out;
   }
@@ -343,26 +381,25 @@
     const head = el("div", "dp-call-head");
     const name = el("span", "dp-call-agent", call.agent || "AI agent");
     name.style.color = AGENT_COLORS[call.agent] || AI_COLOR;
-    const status = STATUS[call.status] || [String(call.status || "").toUpperCase(), "dp-st-think"];
+    const status = STATUS[call.status] || ["Thinking", "dp-st-think"];
     head.append(name, el("span", "dp-time", call.clock || ""),
-                el("span", "dp-time", "Plan " + (call.plan_no != null ? call.plan_no : "?")),
                 el("span", "dp-call-status " + status[1], status[0]));
     box.append(head);
-    if (call.input) box.append(line(null, "Read: " + call.input));
-    const names = [];
+    if (call.input) box.append(line(null, "Asked about: " + call.input));
+    const looked = [];
     (call.tools || []).forEach(function (tool) {
-      if (tool && tool.name != null && names.indexOf(tool.name) < 0) names.push(tool.name);
+      const what = tool && LOOKED_AT[tool.name];
+      if (what && looked.indexOf(what) < 0) looked.push(what);
     });
-    if (names.length) {
-      const mode = String(call.tools_mode || "tools called");
-      box.append(line(null, mode.charAt(0).toUpperCase() + mode.slice(1) + ": " + names.join(", ")));
-    }
+    if (looked.length) box.append(line("dp-detail", "Looked at: " + looked.join(", ") + "."));
     answerLines(call).forEach(function (row) { box.append(row); });
-    if (call.applied) box.append(line(null, "Did: " + call.applied));
+    if (call.applied) box.append(line(null, "Foreman did: " + call.applied));
     if (call.status === "fallback") {
-      box.append(line("dp-call-bad", "Fell back to the rules: " + (call.error || "no answer")));
+      box.append(line("dp-call-bad", "No answer in time. Foreman carried on with its own rules."));
     }
-    if (typeof call.ms === "number") box.append(line("dp-time", (call.ms / 1000).toFixed(1) + " s"));
+    if (typeof call.ms === "number" && call.status === "done") {
+      box.append(line("dp-time", "Answered in " + (call.ms / 1000).toFixed(1) + " s"));
+    }
     return box;
   }
 
@@ -371,7 +408,7 @@
     const calls = Array.isArray(reasoningState) ? reasoningState.slice(0, 10) : [];
     if (!changed("reasoning", JSON.stringify([ai, calls]))) return;
 
-    parts.reasoningNote.textContent = ai.enabled && ai.model ? String(ai.model) : "";
+    parts.reasoningNote.textContent = "";
     const body = parts.reasoningBody;
     body.textContent = "";
     if (!ai.enabled) {
@@ -384,16 +421,16 @@
       banner.setAttribute("role", "status");
       banner.append(el("div", "dp-banner-text", "AI agent thinking…"),
                     el("div", "dp-banner-sub",
-                       "The clock runs at 1× until it answers. The rule-based plan is already in force."));
+                       "The clock is slowed until it answers. Foreman's own plan is already in use."));
       body.append(banner);
     }
     if (ai.estimates > 0 && typeof ai.downtime_gap_min === "number") {
       const chips = el("div", "dp-chips");
-      chips.append(el("span", "dp-chip", "Downtime estimates off by " + ai.downtime_gap_min +
+      chips.append(el("span", "dp-chip", "Repair-time estimates off by " + ai.downtime_gap_min +
                       " min on average (" + ai.estimates + " so far)"));
       body.append(chips);
     }
-    if (!calls.length && !ai.thinking) body.append(el("p", "dp-muted", "No AI agent calls yet."));
+    if (!calls.length && !ai.thinking) body.append(el("p", "dp-muted", "The AI agents have not been asked anything yet."));
     calls.forEach(function (call) { if (call && typeof call === "object") body.append(callBlock(call)); });
   }
 
