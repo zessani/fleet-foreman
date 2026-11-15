@@ -44,9 +44,15 @@ class EventLog:
 
 
 def _key_words(text: str) -> set[str]:
-    """The words of a fault report that say what broke (short filler words dropped)."""
-    return {word for word in "".join(c.lower() if c.isalnum() else " " for c in text).split()
-            if len(word) > 3}
+    """The words of a fault report that say what broke. Filler words of three letters or
+    fewer are dropped; short ones stay when they are capitals or hold a digit (GPS, RTK, PTO, DEF)."""
+    cleaned = "".join(c if c.isalnum() else " " for c in text)
+    return {word.lower() for word in cleaned.split()
+            if len(word) > 3 or (len(word) >= 2 and (word.isupper() or any(c.isdigit() for c in word)))}
+
+
+def _same_report(text: str) -> str:
+    return " ".join(text.lower().split())
 
 
 class Memory:
@@ -77,18 +83,24 @@ class Memory:
                 lessons_file.write(json.dumps(lesson) + "\n")
 
     def relevant_lessons(self, report: str, limit: int = 6) -> list[dict]:
-        """The past lessons most like this fault report: shared words first, and
-        lessons that carry a real repair time ahead of ones that only carry a guess."""
+        """The past lessons most like this fault report. A lesson with a measured repair time
+        comes before one that only carries a guess, and a guess is dropped when a measured
+        lesson exists for the same report text (the measurement supersedes it)."""
         words = _key_words(report)
+        measured = {_same_report(item.get("report", "")) for item in self.lessons
+                    if "actual_downtime_min" in item}
+        candidates = [(index, lesson) for index, lesson in enumerate(self.lessons)
+                      if "actual_downtime_min" in lesson
+                      or _same_report(lesson.get("report", "")) not in measured]
 
         def score(item: tuple[int, dict]) -> tuple[int, int, int]:
             index, lesson = item
             shared = len(words & _key_words(lesson.get("report", "")))
-            return (shared, 1 if "actual_downtime_min" in lesson else 0, index)
+            return (1 if "actual_downtime_min" in lesson else 0, shared, index)
 
-        ranked = sorted(enumerate(self.lessons), key=score, reverse=True)
-        return [lesson for index, lesson in ranked[:limit]
-                if words & _key_words(lesson.get("report", ""))]
+        ranked = sorted(candidates, key=score, reverse=True)
+        return [lesson for index, lesson in ranked
+                if words & _key_words(lesson.get("report", ""))][:limit]
 
     def downtime_gap(self) -> float | None:
         """Average minutes between the AI Recovery agent's estimate and the real repair time."""

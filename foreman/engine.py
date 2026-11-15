@@ -64,7 +64,35 @@ class Engine:
             with open(scenario, encoding="utf-8") as farm_file:
                 self.raw = json.load(farm_file)
             self.scenario = scenario.stem
+            self.seed = None
             self.reset()
+
+    def load_random(self, seed: int | None = None) -> dict:
+        """Build a new farm with the project's farm maker, check it, load it, reset the day.
+
+        The seed is returned and shown on the dashboard, so the same farm can be loaded again.
+        """
+        import random
+        import sys
+
+        tools = str(ROOT / "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)  # the generator and the checker live with the other tools
+        from check_farm import check_farm
+        from make_farm import make_farm
+
+        if seed is None:
+            seed = random.SystemRandom().randrange(1, 100_000)
+        raw = make_farm(seed=seed)
+        mistakes = check_farm(raw)
+        if mistakes:
+            return {"ok": False, "error": f"seed {seed} gave an invalid farm: {mistakes[0]}"}
+        with self._lock:
+            self.raw = raw
+            self.scenario = f"random_{seed}"
+            self.seed = seed
+            self.reset()
+        return {"ok": True, "scenario": self.scenario, "seed": seed, "farm": raw["name"]}
 
     def reset(self) -> None:
         with self._lock:
@@ -181,6 +209,7 @@ class Engine:
                 "clock_speed": self.clock_speed,
                 "finished": day.finished,
                 "scenario": self.scenario,
+                "seed": self.seed,  # set when the farm came from the random farm maker
                 "execution": "agopenweb" if day.foreman.live else "simulation",
                 "farm": {
                     "name": farm.name,

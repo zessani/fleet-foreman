@@ -147,6 +147,15 @@ def post_scenario(body: dict[str, Any]) -> dict:
     return {"ok": True, "scenario": name}
 
 
+@app.post("/api/scenario/random")
+def post_random_scenario(body: dict[str, Any]) -> dict:
+    """{seed?}: build a random farm with the farm maker, check it, load it and reset the day."""
+    seed = body.get("seed")
+    if seed is not None and not (isinstance(seed, int) and 0 < seed < 10_000_000):
+        return {"ok": False, "error": "seed must be a whole number above 0"}
+    return engine.load_random(seed)
+
+
 @app.post("/api/event")
 def post_event(body: dict[str, Any]) -> dict:
     """An event for both worlds, now. Payloads are in CLAUDE.md section 8c."""

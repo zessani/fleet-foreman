@@ -215,3 +215,42 @@ def test_safety_prompt_forbids_replan_when_not_allowed():
     client = FakeClient(good({"concerns": []}))
     ai_safety.review(client, safety_case(may_replan=False))
     assert "may NOT use request_replan" in client.seen["prompt"]
+
+
+GPS = "GPS receiver lost its RTK fix and will not reacquire. Auto-steer has disengaged."
+
+
+def _memory(*lessons):
+    from foreman.memory import Memory
+    memory = Memory(360.0)
+    memory.lessons.extend(lessons)
+    return memory
+
+
+def test_key_words_keep_short_capitals():
+    from foreman.memory import _key_words
+    assert {"gps", "rtk", "pto", "def"} <= _key_words("GPS RTK PTO DEF fix and the")
+    assert "fix" not in _key_words("fix the and") and "a1" in _key_words("part A1")
+
+
+def test_relevant_lessons_measured_before_guessed_and_superseded_guess_dropped():
+    guess = {"report": GPS, "severity": "moderate", "downtime_min": 60, "lesson": "x"}
+    other_guess = {"report": "GPS antenna cable cut", "downtime_min": 90, "lesson": "y"}
+    measured = {"report": GPS, "estimated_min": 60, "actual_downtime_min": 15, "lesson": "z"}
+    got = _memory(guess, other_guess, measured).relevant_lessons(GPS)
+    assert got == [measured, other_guess]
+
+
+def test_relevant_lessons_gps_rtk_only_match_and_unrelated_excluded():
+    rtk = {"report": "RTK base station offline", "actual_downtime_min": 20, "lesson": "a"}
+    unrelated = {"report": "Alternator belt snapped, battery light is on.", "actual_downtime_min": 45, "lesson": "b"}
+    assert _memory(unrelated, rtk).relevant_lessons("Rover RTK dropped") == [rtk]
+    assert _memory(unrelated).relevant_lessons(GPS) == []
+
+
+def test_recovery_prompt_and_tool_say_measured_time_outweighs_estimates():
+    client = FakeClient(good(GOOD_RECOVERY))
+    ai_recovery.diagnose(client, recovery_case())
+    tool = {t.name: t for t in client.seen["tools"]}["past_lessons"]
+    for text in (tool.description, client.seen["prompt"]):
+        assert "actual_downtime_min" in text and "outweighs" in text

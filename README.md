@@ -6,7 +6,62 @@ Foreman is a coordination layer, a rule-based core with two AI agents, that assi
 
 A farm manager today decides by phone and whiteboard which tractor does which job, and redoes the plan by hand when a machine breaks. Foreman does that job with no human in the loop. You give it a farm (fields, roads, tractors, implements) and a list of jobs with priorities and deadlines. A rule-based planner, route finder, safety gate and recovery monitor pick the right implement for each job, decide which tractor does what and in what order, route the tractors between fields so no two share a field, check every plan against fixed safety rules, and send it to the tractors. When a tractor breaks down, they notice it, keep every bit of finished work, give only the unfinished part to other tractors, and explain the new plan in plain English. We plan the work **between** fields; AgOpenGPS already plans the passes **inside** a field.
 
-![Foreman architecture](docs/architecture.png)
+```mermaid
+flowchart TB
+    dash["Dashboard<br/>reads GET /api/state"]
+
+    subgraph core["Rule-based core"]
+        orch["Orchestrator"]
+        plan["Planner"]
+        route["Route finder"]
+        gate["Safety gate"]
+        mon["Recovery monitor"]
+        orch --> plan --> route --> gate
+    end
+
+    subgraph ai["The two AI agents"]
+        airec["AI Recovery agent"]
+        aisafe["AI Safety agent"]
+    end
+
+    subgraph mem["Memory"]
+        log[("Event log")]
+        rates[("Learned work rates")]
+        lessons[("AI lessons")]
+    end
+
+    subgraph iface["Tractor interface"]
+        adapter["status, dispatch with a plan number, stop"]
+        sim["Simulator (default)"]
+        agow["AgOpenWeb (one host per tractor, when FOREMAN_AGOPENWEB_URLS is set)"]
+        atc["ATC tractors (next step)"]
+        adapter --> sim
+        adapter --> agow
+        adapter -.-> atc
+    end
+
+    ev(["Event"]) --> orch
+    gate -- "dispatch" --> adapter
+    gate -. "rejected plan is not sent" .-> plan
+    adapter -- "status feed" --> mon
+    mon -- "breakdown and repair events" --> orch
+    adapter -- "work samples" --> rates
+    rates -- "time and fuel estimates" --> plan
+    rates -- "time and fuel estimates" --> gate
+    orch --> log
+
+    mon -. "fault report, asked after dispatch" .-> airec
+    gate -. "passed plan, asked after dispatch" .-> aisafe
+    airec -. "expected downtime: hold or move work" .-> plan
+    aisafe -. "warn, hold a job, or one re-plan" .-> plan
+    airec -- "writes lessons" --> lessons
+    lessons -- "read" --> airec
+    lessons -- "read" --> aisafe
+
+    dash -. "reads state" .-> core
+```
+
+Rules decide and verify. The two AI agents add caution. Nothing waits on a model.
 
 ## Run it
 

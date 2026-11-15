@@ -209,6 +209,13 @@
   <button id="break-button" class="danger">Break this tractor</button>
   <button id="repair-button">Repair broken tractor</button>
   <a href="view3d.html">3D farm view</a>
+  <label for="scenario">Farm</label>
+  <select id="scenario" aria-label="Farm to load">
+    <option value="sample_farm">Sample farm: 3 tractors, 10 jobs, Cedar fails at 09:30</option>
+    <option value="large_farm">Large farm: Vishva's 5 tractors and 25 jobs</option>
+  </select>
+  <button id="random-farm">Random farm</button>
+  <span id="scenario-note" class="subhead"></span>
   <span id="control-error" class="error"></span>
   <span class="clock" id="clock">--:--</span>
   <span class="run-state" id="run-state">Paused</span>
@@ -280,6 +287,8 @@
 </main>
 <div id="decisions-panel" style="margin: 0 20px 16px;"></div>
 <div id="numbers-panel" style="margin: 0 20px 16px;"></div>
+<div id="why-panel" style="margin: 0 20px 16px;"></div>
+<div id="accuracy-panel" style="margin: 0 20px 16px;"></div>
 
 <script>
   const canvas = document.getElementById("farm-map");
@@ -844,11 +853,46 @@
     requestAnimationFrame(animate);
   }
 
+  async function loadFarm(url, body) {
+    text("control-error", "");
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      await poll();
+    } catch (error) {
+      text("control-error", `Could not load the farm: ${error.message}`);
+    }
+  }
+  document.getElementById("scenario").addEventListener("change", event => loadFarm("/api/scenario", { name: event.target.value }));
+  document.getElementById("random-farm").addEventListener("click", () => loadFarm("/api/scenario/random", {}));
+  setInterval(() => {
+    if (!state) return;
+    const menu = document.getElementById("scenario");
+    const index = [...menu.options].findIndex(option => option.value === state.scenario);
+    if (document.activeElement !== menu) menu.selectedIndex = index;
+    text("scenario-note", state.seed != null ? `Random farm, seed ${state.seed}` : "");
+  }, 500);
+  document.getElementById("jobs").style.cursor = "pointer";
+  document.getElementById("jobs").addEventListener("click", event => {
+    const row = event.target.closest(".job-row");
+    const name = row && row.querySelector("strong");
+    if (!name || !window.WhyPanel) return;
+    window.WhyPanel.show(name.textContent.split(" · ")[0]);
+    document.getElementById("why-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
   poll();
   setInterval(poll, 500);
   requestAnimationFrame(animate);
 </script>
 <script src="panels/decisions.js"></script>
 <script src="panels/numbers.js"></script>
+<script src="panels/why.js"></script>
+<script src="panels/accuracy.js"></script>
 </body>
 </html>
