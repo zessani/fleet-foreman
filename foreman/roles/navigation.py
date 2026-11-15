@@ -1,4 +1,4 @@
-"""Navigation agent: routes between fields and keeps tractors out of each other's fields.
+"""route finder: routes between fields and keeps tractors out of each other's fields.
 
 Tools: the route finder (foreman.nav.RoadMap) and the conflict checker below.
 """

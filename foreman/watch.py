@@ -1,4 +1,4 @@
-"""The tractor status feed reader: the Recovery agent's tool.
+"""The tractor status feed reader: the recovery monitor's tool.
 
 It only looks at what the tractors report through TractorAdapter.status().
 A failure is either a reported fault, or a tractor that says it is working

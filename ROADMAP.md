@@ -4,7 +4,7 @@ Hand-in: 5:00 PM. Code freeze: 4:00 PM.
 Full context and formats are in CLAUDE.md.
 
 ## Status
-- Current phase: 2
+- Current phase: 3
 - Last merge: Merge 2 at 2:40 PM (zayyan, ahmed, vishva)
 - Blockers: the main page does not yet show the plan change, safety result or comparison numbers; the speed menu snaps back to the server's speed
 
@@ -74,9 +74,9 @@ Done when: we can break any tractor and the plan repairs with no human.
 Goal: the numbers and finish that make it feel like a real product.
 
 ### Zayyan
-- [ ] Learning: estimates improve day by day
-- [ ] LLM for breakdown reasoning and explanations
-- [ ] "Why?" for any job
+- [x] Learning: estimates improve day by day
+- [x] LLM for breakdown reasoning and explanations
+- [x] "Why?" for any job
 
 ### Ahmed
 - [ ] Proof run on many random farms

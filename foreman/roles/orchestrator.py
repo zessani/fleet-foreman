@@ -18,7 +18,7 @@ from foreman.explain import explain
 from foreman.memory import Memory
 from foreman.run import Run
 
-# Event -> the agents that handle it, in order (CLAUDE.md section 6).
+# Event -> the roles that handle it, in order (CLAUDE.md section 6).
 # A route that includes Fleet ends in a new plan and, if Safety passes it, a dispatch.
 ROUTES: dict[str, tuple[str, ...]] = {
     "jobs_submitted":   ("Planner", "Route finder", "Safety gate"),
@@ -59,7 +59,7 @@ class Orchestrator(Role):
             replans = "Planner" in route
             self.say("route", f"{event['type']}: {', '.join(route)}"
                               f"{', dispatch' if replans else ''}.", route=list(route))
-            # Agents listed before Fleet act on the event itself.
+            # Roles listed before the planner act on the event itself.
             for name in route[: route.index("Planner")] if replans else route:
                 self._first_responder[name].on_event(cycle, event)
             needs_plan = needs_plan or replans

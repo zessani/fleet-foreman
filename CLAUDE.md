@@ -68,8 +68,9 @@ Tiebreaker: "Would a farm operator trust this plan?"
 
 ## 4. The product
 
-**Foreman** is an agent orchestration layer that runs a fleet of autonomous
-tractors with no human in the loop. It assigns jobs, picks the implement,
+**Foreman** is an orchestration layer that runs a fleet of autonomous
+tractors with no human in the loop. Five rule-based roles and two AI agents
+work together; rules decide and verify, the AI agents only add caution. It assigns jobs, picks the implement,
 sends each tractor to work, and repairs the plan by itself when a tractor
 breaks down.
 
@@ -84,7 +85,7 @@ breaks down.
 - Accurate, with proof: zero rule violations across many random test farms.
 - Fast, with proof: re-plan time shown live in milliseconds.
 - Ready to run: one command starts it with a sample farm loaded.
-- Runs offline. No cloud call is needed for the core.
+- Runs offline. No cloud call is needed for the core. The two AI agents are optional and need a model token.
 
 ## 5. Farming in five minutes
 
@@ -107,53 +108,100 @@ field. AgOpenGPS does that.
 
 ## 6. Architecture
 
-Five agents share one memory and call fixed tools. Agents decide what to do.
-Tools do the exact work, so plans are fast and never break a rule.
+Seven roles share one memory and call fixed tools. Five are rule-based code.
+Two are AI agents, which means a real model is behind them. Roles decide what
+to do. Tools do the exact work, so plans are fast and never break a rule.
+The model never assigns jobs and nothing waits on it.
 
-| Agent | Job | Tool it calls |
-|---|---|---|
-| Orchestrator | Runs the loop, routes each event to the right agents | Task queue |
-| Fleet | Decides which tractor does which job, in what order, and with which implement | Planner (solver), implement picker |
-| Navigation | Routes between fields, stops tractors sharing a field | Route finder, conflict checker |
-| Safety | Passes or rejects every plan. Replaces human approval | Rule verifier |
-| Recovery | Watches tractors, spots a failure, starts the re-plan, records lessons | Tractor status feed |
+| Role | AI agent? | Job | Tool it calls |
+|---|---|---|---|
+| Orchestrator | No | Runs the loop, routes each event to the right roles | Task queue, the ROUTES table |
+| Planner (`FleetPlanner`) | No | Decides which tractor does which job, in what order, and with which implement | Planner (solver) in `planner.py`, implement picker in `model.py` |
+| Route finder | No | Routes between fields, stops tractors sharing a field | `foreman/nav` RoadMap, field conflict checker |
+| Safety gate | No | Passes or rejects every plan. Replaces human approval | Rule verifier (`safety.py`, nine checks, does not import the planner) |
+| Recovery monitor | No | Watches tractors, spots a failure, starts the re-plan, records the incident | Tractor status feed reader (`watch.py`) |
+| AI Recovery agent | Yes | Reads a broken tractor's fault report. Returns severity, expected downtime in minutes, a reason and a one-line lesson | Read-only: `tractor_status`, `jobs_at_risk`, `past_lessons` |
+| AI Safety agent | Yes | Reviews a plan the safety gate already passed. Returns a list of concerns, each `warn`, `hold_job` or `request_replan` | Read-only: `plan_summary`, `tractor_history`, `recent_log`, `past_lessons` |
+
+Log lines carry the role name in the `agent` key (the key name is kept for
+compatibility): `Orchestrator`, `Planner`, `Route finder`, `Safety gate`,
+`Recovery monitor`, `AI Recovery agent`, `AI Safety agent`.
 
 **The loop**
 1. Jobs arrive (or an event happens).
-2. Fleet and Navigation build a plan. Fleet picks each implement with the implement picker tool.
-3. Safety checks it. A plan that fails a hard check is never sent.
+2. The planner and the route finder build a plan. The planner picks each implement with the implement picker tool.
+3. The safety gate checks it. A plan that fails a hard check is never sent.
+   If it fails, the orchestrator plans once more from scratch. If that fails too, nothing is sent.
 4. The plan is dispatched to the tractors.
-5. Recovery watches for trouble.
+5. The recovery monitor watches for trouble.
 6. On a breakdown or blocked road, go to step 2 with finished work frozen.
+7. Beside the loop: after a breakdown with a fault report, the AI Recovery agent
+   estimates the downtime. After the safety gate passes a plan, the AI Safety
+   agent reviews it. Their answers come back later as follow-up events (below).
 
-**Event routing table** (keep this explicit in code, it is part of the pitch)
+**Event routing table** (explicit in code as `ROUTES` in `foreman/roles/orchestrator.py`, it is part of the pitch)
 
-| Event | Agents, in order |
+| Event | Roles, in order |
 |---|---|
-| jobs_submitted | Fleet, Navigation, Safety, dispatch |
-| breakdown | Recovery, Fleet, Navigation, Safety, dispatch |
-| repaired | Recovery, Fleet, Navigation, Safety, dispatch |
-| road_blocked / road_opened | Navigation, Fleet, Navigation, Safety, dispatch |
-| priority_changed / job_added | Fleet, Navigation, Safety, dispatch |
-| drift (a job finished 15+ min behind plan) | Recovery, Fleet, Navigation, Safety, dispatch |
-| job_done / work_sample | Recovery (learn), no re-plan |
+| jobs_submitted | Planner, Route finder, Safety gate, dispatch |
+| breakdown | Recovery monitor, Planner, Route finder, Safety gate, dispatch |
+| repaired | Recovery monitor, Planner, Route finder, Safety gate, dispatch |
+| road_blocked / road_opened | Route finder, Planner, Route finder, Safety gate, dispatch |
+| priority_changed / job_added | Planner, Route finder, Safety gate, dispatch |
+| drift (a job finished 15+ min behind plan) | Recovery monitor, Planner, Route finder, Safety gate, dispatch |
+| downtime_estimate (AI Recovery agent answered) | Planner, Route finder, Safety gate, dispatch |
+| downtime_expired (the tractor is not back 10 min after the estimate) | Planner, Route finder, Safety gate, dispatch |
+| ai_caution (AI Safety agent asked for a re-plan) | Planner, Route finder, Safety gate, dispatch |
+| hold_released (a 30 minute hold ended) | Planner, Route finder, Safety gate, dispatch |
+| job_done / work_sample | Recovery monitor (logs it), no re-plan. work_sample also goes to the learning loop |
 
-Events seen in the same status reading share one re-plan. Recovery reads the
-tractor status feed once per simulated minute. A failure is a reported fault,
-or a tractor that says it is working but makes no progress for 5 minutes.
+Events seen in the same status reading share one re-plan. The recovery monitor
+reads the tractor status feed once per simulated minute. A failure is a
+reported fault, or a tractor that says it is working but makes no progress for
+5 minutes.
 
-**Memory, three kinds**
+**Rules for the AI agents, enforced in code**
+- The model never assigns jobs. The planner does.
+- A re-plan never waits on the model. The rule-based plan is dispatched first,
+  and the model's answer is applied when it arrives.
+- Each call has a 10 second limit. The client enforces it, and `AiCrew`
+  abandons a call at 12 seconds as a backstop.
+- Any error, timeout or bad JSON falls back to the rules and is logged.
+- The AI Safety agent is asked only after the safety gate has passed a plan,
+  once per plan. It can only add caution. Any plan it triggers must pass the
+  safety gate again. An answer for a plan that has been replaced is discarded.
+- The clock drops to 1x while an AI agent is thinking (`clock_speed`).
+
+**How answers change the plan**
+- An expected downtime goes to `planner.plan_with_return`. It scores moving the
+  work now and waiting for the tractor, both in the same world, and holds the
+  work for the tractor only if waiting is cheaper (by more than `WAIT_MARGIN`,
+  10 minutes). If the tractor is not back 10 minutes after the estimate, the
+  held work is moved.
+- `request_replan` with the one caution `spread_dependent_jobs` makes the
+  planner add a cost (`CHAIN_COST`) for keeping a job and the job that depends
+  on it on one tractor.
+- `hold_job` holds one job for 30 minutes.
+- `warn` is only logged and shown.
+
+**Memory, five kinds**
 - **World state:** where each tractor is, what is done, what is half done.
 - **Event log:** every decision and its reason, in order. Append only. This is
-  also the hand-in log. Save as JSON Lines.
-- **Learned facts:** measured field speeds and breakdown history. Kept across days.
+  also the hand-in log. Save as JSON Lines (`runs/event_log.jsonl`). A new day starts a new file.
+- **Incidents and downtime estimates:** one record per breakdown, and the AI
+  Recovery agent's estimate against the real repair time. Current day only.
+- **AI lessons:** one-line lessons, written only by the AI Recovery agent, in
+  `runs/lessons.jsonl`. Kept across days. The AI Safety agent reads them.
+- **Learned work rates:** a running factor per tractor, implement and field, in
+  `runs/learned.json`. Kept across days. See section 16.
 
-**Agents in Phase 1 and 2 are plain Python modules** with one clear job each.
-No LLM is needed for them to work. The LLM is added in Phase 3 for incident
-reasoning and for wording explanations, behind one setting. If the LLM or the
-network fails, the system falls back to the tools alone.
+**The five rule-based roles are plain Python modules** (in `foreman/roles/`)
+with one clear job each. They need no model. The two AI agents are
+`foreman/ai_recovery.py` and `foreman/ai_safety.py`, started by `foreman/ai_desk.py`
+through `AiCrew`. When the model is off, unreachable or wrong, every decision is rule-based.
 
 **Safety rules are fixed.** Learning may tune estimates. It may never relax a rule.
+The AI Safety agent can ask for more caution. It cannot remove a check.
 
 ## 7. Tech choices
 
@@ -165,7 +213,19 @@ network fails, the system falls back to the tools alone.
   Google OR-Tools is optional as a second opinion. Do not block on it.
 - Tests: pytest for the rules and the planner.
 - One command to run: `python -m foreman.server` then open `http://localhost:8000`.
-- Ask before adding any other dependency.
+- Ask before adding any other dependency. The model needs none.
+- **The model (AI Recovery agent and AI Safety agent):** Claude Haiku 5.5, reached
+  through the Claude Code command line (`claude`) in non-interactive mode. It
+  uses a token in `.env` (`CLAUDE_CODE_OAUTH_TOKEN`; the file is git-ignored and
+  was never committed). Everything sits behind one interface, `ModelClient` in
+  `foreman/ai_base.py`, so switching to a normal API key is a change to one file
+  (`foreman/llm.py`). The model reads data through a small read-only tool server
+  (`foreman/tool_server.py`).
+- Settings: `FOREMAN_LLM_MODEL` picks the model. `FOREMAN_AI=0` forces the AI
+  agents off. `FOREMAN_AI_TOOLS=prompt` passes the data in the prompt instead of
+  through the tool server.
+- The AI agents are off when there is no token, when the `claude` command is not
+  installed, or when `FOREMAN_AI=0`. Then every decision is rule-based.
 
 ## 8. The three contracts
 
@@ -238,8 +298,9 @@ class TractorAdapter(Protocol):
 
 ```json
 {
-  "now": 215.0, "clock": "09:35", "running": true, "speed": 4,
-  "farm": {"name": "...", "nodes": [], "roads": [], "blocked": [["X1", "F1"]]},
+  "now": 215.0, "clock": "09:35", "running": true, "speed": 4, "clock_speed": 4,
+  "farm": {"name": "...", "nodes": [], "roads": [], "blocked": [["X1", "F1"]],
+           "implements": [], "day_start_min": 360, "horizon_min": 660},
   "foreman": {
     "tractors": [{"id": "T1", "name": "Atlas", "x": 1.1, "y": 2.0, "status": "working",
                   "job": "J3", "fuel_pct": 72, "mounted": "disc_6", "color": "#E8A33D"}],
@@ -254,7 +315,10 @@ class TractorAdapter(Protocol):
                "working_share": 78.5, "km": 24.1, "violations": 0},
     "explanation": {"headline": "...", "summary": "...", "changes": [], "ms": 38},
     "safety": {"passed": true, "checks": []},
-    "log": []
+    "log": [],
+    "ai": {"enabled": true, "thinking": false, "model": "claude-haiku-5-5 via Claude Code",
+           "estimates": 1, "downtime_gap_min": 5.0},
+    "reasoning": []
   },
   "baseline": {"tractors": [], "jobs": [], "plan": [], "totals": {}}
 }
@@ -268,8 +332,24 @@ Shapes inside the state
 - `safety.checks[]`: `{id, name, passed, severity, detail}`. `id` is the rule
   number from section 12. `severity` is `hard` or `warning`.
 - `log[]`: `{t, clock, agent, event, message}`. `t` is minutes from the start
-  of the day. `agent` is one of the five agent names.
-- `speed` is simulated minutes per real second: 1, 4, 16, or 60.
+  of the day. `agent` is one of the seven role names (section 6).
+- `speed` is simulated minutes per real second: 1, 4, 16, or 60. `clock_speed`
+  is the speed the clock really runs at: 1 while an AI agent is thinking,
+  otherwise `speed`.
+- `farm.implements` is the implement list from the farm file (section 8a).
+  `farm.day_start_min` and `farm.horizon_min` are the farm file values.
+- `foreman.ai`: `{enabled, thinking, model, estimates, downtime_gap_min}`.
+  `enabled` is false when the AI agents are off. `model` is null then.
+  `estimates` counts AI Recovery agent downtime estimates scored today.
+  `downtime_gap_min` is the average gap in minutes between those estimates and
+  the real repair time, or null.
+- `foreman.reasoning`: AI agent calls, newest first (the latest 10). Each is
+  `{agent, plan_no, at, clock, input, status, tools, tools_mode, answer, applied, ms, error}`.
+  `agent` is `AI Recovery agent` or `AI Safety agent`. `status` is `thinking`,
+  `done` or `fallback`. `tools` is `[{name, args}]`, the tools the model called.
+  `tools_mode` is `tools called` or `data read` (data passed in the prompt).
+  `answer` is the checked answer or null. `applied` is what Foreman did with it.
+  `error` says why a call fell back.
 - Job and implement `type` values: `spray | mow | till | plant`.
 - `totals` meanings are in section 13. `baseline` has the same `tractors`,
   `jobs`, `plan`, `plan_no`, and `totals` as `foreman`.
@@ -280,7 +360,10 @@ Shapes inside the state
 
 Event payloads for `POST /api/event`
 - `{"type": "breakdown", "tractor": "T2"}`. Add `"silent": true` for a tractor
-  that keeps reporting "working" but stops making progress.
+  that keeps reporting "working" but stops making progress. Optional fields:
+  `report` (the fault report as text) and `repair_after_min` (the real repair
+  time, used only by the simulator; null keeps the tractor out all day). A
+  breakdown sent without a `report` gets the next sample from `foreman/faults.py`.
 - `{"type": "repair", "tractor": "T2"}`
 - `{"type": "block_road", "a": "X1", "b": "F1"}`
 - `{"type": "open_road", "a": "X1", "b": "F1"}`
@@ -289,11 +372,15 @@ Event payloads for `POST /api/event`
 
 The same shapes, plus `at` in minutes, are used in a farm file's `events` list.
 The reply is `{"ok": true, "at": 94.2}` or `{"ok": false, "error": "..."}`.
-A breakdown or repair only changes the tractor. The Recovery agent notices it
+A breakdown reply also carries `report` when the fault has one, so the caller
+sees the text that was used. The simulated tractor comes back by itself after
+`repair_after_min`, in both worlds. The AI Recovery agent reads the report and
+estimates the downtime.
+A breakdown or repair only changes the tractor. The recovery monitor notices it
 on the next status reading, so the clock must be running for the re-plan.
 A log line may also carry `data`, a small object with the numbers behind the
 message (for example `plan_no`, `ms`, `detection_min`).
-`explanation` also has `safety` (the Safety line) and the counts `moved`,
+`explanation` also has `safety` (the safety gate line) and the counts `moved`,
 `retimed`, `unchanged`, `held`.
 
 Report: `GET /api/report`
@@ -318,8 +405,20 @@ Other endpoints
 - `POST /api/control` with `{action: start|pause|reset, speed}`
 - `POST /api/scenario` with `{name}` to load a farm file
 - `POST /api/event` with `{type: breakdown|repair|block_road|open_road|set_priority|add_job, ...}`
-- `GET /api/why?job=J1`
-- `GET /api/log` (JSON Lines), `GET /api/report` (baseline comparison, shape above)
+- `GET /api/why?job=J1`: `{job, label, status, chosen, held_reason, others, text}`.
+  `chosen` is the tractor that got the job (or null). `others` is
+  `[{tractor, name, reason}]` for every other tractor. `text` is plain sentences.
+  An unknown job gives `{"ok": false, "error": "..."}`.
+- `GET /api/learning`: `{days: [{day, gap_pct, samples}], factors: [{tractor, implement,
+  field, factor, samples, hectares}], days_run, lessons: [...],
+  downtime_estimates: {count, avg_gap_min, items}}`. `lessons` are the AI
+  Recovery agent's lessons (latest 30). `downtime_estimates.items` are today's
+  estimates against the real repair time.
+- `POST /api/learning/run` with `{days}` (a whole number, 1 to 30): runs that many
+  quiet days off screen with hidden speed factors on and learns from them.
+  Reply `{"ok": true, "days": [{day, gap_pct, samples, violations, jobs_done, on_time, finish_min}]}`.
+- `GET /api/log` (JSON Lines), `GET /api/report` (baseline comparison, shape above;
+  it runs with no model and no learning, so it is repeatable)
 
 Every event is applied to both the Foreman run and the baseline run at the
 same simulated time, so the comparison is fair.
@@ -355,7 +454,7 @@ Notes
 ## 9. Repo layout and owners
 
 ```
-foreman/            Zayyan   planner, simulation, agents, memory, safety, server
+foreman/            Zayyan   planner, simulation, roles, AI agents, memory, safety, server
 foreman/nav/        Ahmed    road routing
 web/                Ahmed    dashboard page and farm map
 web/panels/         Vishva   numbers panel, why panel, accuracy chart
@@ -489,7 +588,7 @@ Pressing start runs a full day on screen. Every job finishes. The referee
 reports zero violations. Foreman beats the baseline on travel and idle time.
 
 ### Phase 2: breakdowns and the real tractor (2:00 to 3:00)
-- Zayyan: breakdown recovery, Safety gate, five named agents with a log,
+- Zayyan: breakdown recovery, Safety gate, five rule-based roles with a log,
   plain-language explanation of each re-plan.
 - Ahmed: AgOpenGPS link driving one tractor, "break this tractor" control,
   breakdown test cases.
@@ -497,7 +596,7 @@ reports zero violations. Foreman beats the baseline on travel and idle time.
 
 **Done when:** breaking any tractor at any time leads to a new plan with no
 human. Finished work is kept. A half-done field is finished once. The Safety
-Agent passes every dispatched plan. An explanation appears. One tractor moves
+gate passes every dispatched plan. An explanation appears. One tractor moves
 in AgOpenGPS.
 
 ### Phase 3: learning, proof, polish (3:00 to 4:00)
@@ -525,7 +624,7 @@ Every re-plan produces an explanation built from the plan data, not invented.
 - One line per changed job: "Spray East Orchard: the remaining 40% moves from
   Bolt to Cedar. Finishes 10:25, 35 min before its 11:00 deadline."
 - Summary: "2 jobs moved, 1 retimed, 6 unchanged. All deadlines are still met."
-- Safety line: "Safety Agent passed 9 of 9 checks."
+- Safety line: "Safety gate passed 9 of 9 checks."
 - Re-plan time in milliseconds.
 
 **"Why?" for a job:** show the chosen tractor, then every other tractor with
@@ -534,17 +633,34 @@ of service, or "would finish 10:40, 25 min past the deadline".
 
 ## 16. Learning loop (Phase 3)
 
-Plan, run, measure, update, plan better.
+Plan, run, measure, update, plan better. Built in `foreman/learning.py`.
 
-- When a tractor finishes or stops work on a job, record hectares covered and
-  minutes spent. Compare with the catalog rate.
-- Keep a running average speed factor per tractor, implement, and field.
-- The planner uses the learned factor for its time estimates.
-- Record breakdowns per tractor and a one-line lesson per incident.
-- Save learned facts to a file so day 2 starts with them.
-- Demo: run several simulated days fast. Chart the average estimate error per day.
-- State plainly that this is shown in simulation, where hidden true speeds
-  differ from the catalog.
+- Each time a tractor finishes or stops work on a job, the simulator emits a
+  work sample: hectares covered and minutes spent. Foreman compares it with the
+  catalog rate.
+- `Learning` keeps a running work-rate factor per tractor, implement and field.
+  It falls back to the same implement on the same field, then to the same
+  tractor and implement elsewhere, then to 1.0. Factors are clamped to 0.4 to 1.6.
+- The planner and the safety gate use the learned factor for time and fuel
+  estimates. Safety rules are fixed. Learning only tunes estimates.
+- Factors are saved to `runs/learned.json` and loaded at start, so day 2 starts
+  with them.
+- `run_days` (and `POST /api/learning/run`) runs several quiet days off screen
+  with no clock and the hidden factors on. `GET /api/learning` returns the
+  estimate error per day, the factors, and the AI lessons.
+- Breakdown incidents and downtime estimate accuracy are kept for the current
+  day only. Lessons from the AI Recovery agent are kept across days in
+  `runs/lessons.jsonl`.
+- **Measured** (average gap between predicted and actual work minutes):
+  - With the hidden factors in `scenarios/example_farm.json`: 2.2% on day 1
+    and 0.0% from day 2.
+  - With the stronger hidden factors used in `tests/test_learning.py`
+    (`*|mow|F3` 0.7, `*|till|F4` 0.8, `T2|spray|*` 1.15) on the same farm:
+    19.1% on day 1 and 0.0% from day 2.
+- The gap drops in one day because the simulator's hidden factors are constant.
+  This is shown in simulation, where hidden true speeds differ from the catalog.
+- The comparison report (`GET /api/report`) and `python -m foreman.sweep` run
+  with no model and no learning, so they stay repeatable.
 
 ## 17. AgOpenGPS link (Phase 2, Ahmed)
 
@@ -585,7 +701,7 @@ to 45 minutes. If it is not working by 2:45, stop and document the message forma
 
 1. Problem, 20 s. A person still decides who goes where and redoes it when
    something breaks.
-2. Product, 20 s. Five agents, no human in the loop.
+2. Product, 20 s. Five rule-based roles and two AI agents, no human in the loop.
 3. Live demo, 90 s. Submit jobs, watch the plan run next to the baseline,
    break a tractor, watch the plan repair and explain itself. Show the
    tractor in AgOpenGPS.
@@ -601,4 +717,6 @@ Build toward this script. Anything that does not appear in it is lower priority.
 - Is hand-in at 5:00 or 5:30? Plan for 5:00.
 - Does ATC provide a "starter dispatcher", or is it first come, first served?
 - What does an hour of tractor time cost, so we can turn saved hours into dollars?
-- Which LLM do we use in Phase 3: an API key, or a local model?
+- Which LLM do we use in Phase 3: an API key, or a local model? Answered: Claude
+  Haiku 5.5 through the Claude Code command line with a token in `.env`, behind
+  one interface so a normal API key is a one-file change. See section 7.

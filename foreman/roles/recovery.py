@@ -1,4 +1,4 @@
-"""Recovery agent: watches the tractors, spots a failure, records the lesson.
+"""recovery monitor: watches the tractors, spots a failure, records the lesson.
 
 Tool: the tractor status feed (foreman/watch.py).
 """

@@ -1,1 +1,1 @@
-"""Foreman: an agent layer that runs a fleet of autonomous tractors."""
+"""Foreman: a coordination layer that runs a fleet of autonomous tractors."""

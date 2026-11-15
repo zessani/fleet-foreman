@@ -1,4 +1,4 @@
-"""Fleet agent: which tractor does which job, in what order, with which implement.
+"""planner: which tractor does which job, in what order, with which implement.
 
 Tools: the implement picker (foreman.model.pick_implement) and the planner
 (foreman.planner.plan).

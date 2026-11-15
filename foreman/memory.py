@@ -1,4 +1,4 @@
-"""The shared memory of the agents (CLAUDE.md section 6).
+"""The shared memory of the roles and the AI agents (CLAUDE.md section 6).
 
 Three kinds:
 - world state: lives in the simulation and is read through Run.world()

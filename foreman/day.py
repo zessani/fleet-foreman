@@ -162,7 +162,7 @@ class Day:
     def _apply(self, event: dict) -> None:
         kind = event["type"]
         if kind == "breakdown":
-            # Only the tractor changes here. Nobody is told: the Recovery agent
+            # Only the tractor changes here. Nobody is told: the recovery monitor
             # has to notice it from the status feed.
             for run in (self.foreman, self.baseline):
                 tractor = run.sim.tractors[event["tractor"]]

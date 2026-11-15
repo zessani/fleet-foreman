@@ -1,4 +1,4 @@
-"""What every agent shares: the run it works on, the memory, and one cycle of work."""
+"""What every rule-based role shares: the run it works on, the memory, and one cycle of work."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from foreman.state import Plan, WorldState
 
 @dataclass
 class Cycle:
-    """One pass through the routing table: the events, and what each agent added."""
+    """One pass through the routing table: the events, and what each role added."""
 
     events: list[dict]              # handled together; each has a "type"
     started: float                  # time.perf_counter() when the events reached the Orchestrator
@@ -34,7 +34,7 @@ class Role:
         self.memory = memory
 
     def say(self, event: str, message: str, **data) -> None:
-        """Write one line to the event log under this agent's name."""
+        """Write one line to the event log under this role's name."""
         self.memory.log.append(self.run.now, self.name, event, message, **data)
 
     def job_label(self, job_id: str) -> str:
