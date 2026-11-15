@@ -16,6 +16,7 @@ from foreman.ai_base import AI_TIMEOUT_S, DATA_READ, TOOLS_CALLED, ModelReply, T
 
 DEFAULT_MODEL = "claude-haiku-5-5"
 DEFAULT_TOOLS_MODE = "server"
+EFFORT = os.environ.get("FOREMAN_LLM_EFFORT") or "low"
 SERVER_PATH = Path(__file__).with_name("tool_server.py")
 SERVER_HINT = ("Call the tools you need, all in one step where possible, "
                "before you give your answer.")
@@ -103,7 +104,7 @@ class ClaudeCodeClient:
         use_server = self.tools_mode == "server" and bool(tools)
         calls_path = workdir / "calls.jsonl"
         cmd = ["claude", "-p", prompt, "--model", self.model, "--output-format", "json",
-               "--json-schema", json.dumps(schema), "--tools", "",
+               "--json-schema", json.dumps(schema), "--tools", "", "--effort", EFFORT,
                "--strict-mcp-config", "--no-session-persistence"]
         if use_server:
             snapshot = workdir / "snapshot.json"
