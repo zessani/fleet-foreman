@@ -4,12 +4,9 @@ Owner: Ahmed
 
 Road routing between the yard, junctions and fields.
 
-`roadmap.py` holds a **stand-in** `RoadMap` that uses straight-line distance
-and ignores roads. It exists so the planner can be built before real routing
-is ready.
-
-**Ahmed: replace the inside of `RoadMap`, keep the interface.** The interface
-is CLAUDE.md section 8d (proposed, pending your agreement):
+`roadmap.py` precomputes shortest paths over the farm's two-way road graph so
+planner queries are plain lookups. It rebuilds routes only when a road is
+blocked or reopened. The interface is defined in CLAUDE.md section 8d:
 
 ```python
 RoadMap(farm)               # farm file as a dict, section 8a
@@ -19,13 +16,13 @@ RoadMap(farm)               # farm file as a dict, section 8a
     .open(a, b)             # reopen it
 ```
 
-What the real version needs
+Behavior
 - Shortest path over `farm["roads"]` (two-way links). If `roads` is missing,
   every pair of nodes is directly linked.
-- Work out all routes once at creation and again only after `block` or
-  `open`. The planner calls `distance` thousands of times per plan, so it must
-  be a lookup.
+- Work out all routes once at creation and again only after `block` or `open`.
+  `distance` and `path` are lookups.
 - A blocked road is removed from the graph.
+- An unreachable destination returns `math.inf` and an empty path.
 
-`tests/test_skeleton.py` checks the interface. If you want to change the
-interface, say so before editing; the planner depends on it.
+`tests/test_roadmap.py` covers routing, closures, disconnections, validation,
+and farms without explicit roads.

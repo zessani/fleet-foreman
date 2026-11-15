@@ -4,9 +4,9 @@ Hand-in: 5:00 PM. Code freeze: 4:00 PM.
 Full context and formats are in CLAUDE.md.
 
 ## Status
-- Current phase: 0
-- Last merge: none yet
-- Blockers: none
+- Current phase: 2
+- Last merge: Merge 1 at 2:00 PM (zayyan, ahmed, vishva)
+- Blockers: dashboard speed options 10x and 30x are rejected by the server (it takes 1, 4, 16, 60)
 
 Only tick boxes in your own section. Zayyan updates Status at each merge.
 
@@ -19,7 +19,7 @@ Goal: a starter repo that runs, so everyone can build on it.
 
 ### Ahmed
 - [ ] AgOpenWeb installed and opens on a Mac
-- [ ] Routing interface (section 8d) agreed
+- [x] Routing interface (section 8d) agreed
 
 ### Vishwa
 - [ ] Repo cloned and server runs
@@ -31,13 +31,13 @@ Done when: the sample farm runs a full day, every job finishes, no rule
 is broken, and we beat "first come, first served".
 
 ### Zayyan
-- [ ] Planner (starts from the current state)
-- [ ] Simulation loop
-- [ ] "First come, first served" baseline
+- [x] Planner (starts from the current state)
+- [x] Simulation loop
+- [x] "First come, first served" baseline
 
 ### Ahmed
-- [ ] Shortest routes and travel times
-- [ ] Farm map with tractors moving and field progress
+- [x] Shortest routes and travel times
+- [x] Farm map with tractors moving and field progress
 
 ### Vishwa
 - [x] Sample farm file: 3 tractors, 8 fields, 10 jobs
@@ -52,10 +52,10 @@ Goal: a tractor breaks, the plan fixes itself, one tractor moves in AgOpenGPS.
 Done when: we can break any tractor and the plan repairs with no human.
 
 ### Zayyan
-- [ ] Breakdown recovery, no lost or repeated work
-- [ ] Safety check before every plan is sent
-- [ ] Six named agents with a log
-- [ ] Plain explanation of each plan change
+- [x] Breakdown recovery, no lost or repeated work
+- [x] Safety check before every plan is sent
+- [x] Five named agents with a log
+- [x] Plain explanation of each plan change
 
 ### Ahmed
 - [ ] AgOpenGPS link driving one tractor
