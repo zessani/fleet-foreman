@@ -51,7 +51,7 @@ class SafetyReport:
 
     def summary(self) -> str:
         ok = sum(1 for c in self.checks if c.passed)
-        return f"Safety Agent passed {ok} of {len(self.checks)} checks."
+        return f"Safety gate passed {ok} of {len(self.checks)} checks."
 
     def failures(self) -> list[Check]:
         return [c for c in self.checks if c.severity == "hard" and not c.passed]

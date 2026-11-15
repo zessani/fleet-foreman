@@ -23,7 +23,20 @@ def test_panel_reads_only_fields_the_state_has() -> None:
     foreman = Engine().state()["foreman"]
     for key in ("explanation", "safety", "log", "plan_no"):
         assert key in foreman and f"foreman.{key}" in script
+    for key in ("ai", "reasoning"):
+        assert f"foreman.{key}" in script  # optional on older servers
     for key in ("headline", "summary", "changes", "ms", "moved", "retimed", "unchanged", "held"):
         assert key in foreman["explanation"] and f"story.{key}" in script
     assert {"id", "name", "passed", "severity", "detail"} <= foreman["safety"]["checks"][0].keys()
     assert {"clock", "agent", "message"} <= foreman["log"][0].keys()
+
+
+def test_panel_names_roles_for_what_they_are_and_shows_ai_agents() -> None:
+    script = (PANELS / "decisions.js").read_text(encoding="utf-8")
+    for text in ("Safety gate", "Activity log", "AI agent thinking",
+                 "Fell back to the rules", "charAt(0).toUpperCase()", "foreman.ai",
+                 "foreman.reasoning", "prefers-reduced-motion", "@keyframes"):
+        assert text in script, text
+    assert not re.search(r"(?<!AI )Safety agent", script)
+    assert "Agent log" not in script
+    assert "coming in Phase 3" not in script

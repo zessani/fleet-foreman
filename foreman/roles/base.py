@@ -25,8 +25,8 @@ class Cycle:
     from_scratch: bool = False      # second attempt after Safety rejected the first
 
 
-class Agent:
-    name = "Agent"
+class Role:
+    name = "Role"
 
     def __init__(self, run: Run, memory: Memory) -> None:
         self.run = run

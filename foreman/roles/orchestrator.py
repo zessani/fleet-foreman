@@ -1,7 +1,7 @@
-"""Orchestrator: runs the loop and routes each event to the right agents.
+"""Orchestrator: runs the loop and routes each event to the right roles.
 
-No human is in this loop. An event comes in, the agents named in ROUTES act
-in order, the Safety agent approves or rejects, and an approved plan is
+No human is in this loop. An event comes in, the roles named in ROUTES act
+in order, the Safety gate approves or rejects, and an approved plan is
 dispatched to the tractors.
 """
 
@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import time
 
-from foreman.agents.base import Agent, Cycle
-from foreman.agents.fleet import FleetAgent
-from foreman.agents.navigation import NavigationAgent
-from foreman.agents.recovery import RecoveryAgent
-from foreman.agents.safety_agent import SafetyAgent
+from foreman.roles.base import Cycle, Role
+from foreman.roles.fleet import FleetPlanner
+from foreman.roles.navigation import RouteFinder
+from foreman.roles.recovery import RecoveryMonitor
+from foreman.roles.safety_gate import SafetyGate
 from foreman.explain import explain
 from foreman.memory import Memory
 from foreman.run import Run
@@ -21,29 +21,34 @@ from foreman.run import Run
 # Event -> the agents that handle it, in order (CLAUDE.md section 6).
 # A route that includes Fleet ends in a new plan and, if Safety passes it, a dispatch.
 ROUTES: dict[str, tuple[str, ...]] = {
-    "jobs_submitted":   ("Fleet", "Navigation", "Safety"),
-    "breakdown":        ("Recovery", "Fleet", "Navigation", "Safety"),
-    "repaired":         ("Recovery", "Fleet", "Navigation", "Safety"),
-    "road_blocked":     ("Navigation", "Fleet", "Navigation", "Safety"),
-    "road_opened":      ("Navigation", "Fleet", "Navigation", "Safety"),
-    "priority_changed": ("Fleet", "Navigation", "Safety"),
-    "job_added":        ("Fleet", "Navigation", "Safety"),
-    "drift":            ("Recovery", "Fleet", "Navigation", "Safety"),
-    "job_done":         ("Recovery",),
-    "work_sample":      ("Recovery",),
+    "jobs_submitted":   ("Planner", "Route finder", "Safety gate"),
+    "breakdown":        ("Recovery monitor", "Planner", "Route finder", "Safety gate"),
+    "repaired":         ("Recovery monitor", "Planner", "Route finder", "Safety gate"),
+    "road_blocked":     ("Route finder", "Planner", "Route finder", "Safety gate"),
+    "road_opened":      ("Route finder", "Planner", "Route finder", "Safety gate"),
+    "priority_changed": ("Planner", "Route finder", "Safety gate"),
+    "job_added":        ("Planner", "Route finder", "Safety gate"),
+    "drift":            ("Recovery monitor", "Planner", "Route finder", "Safety gate"),
+    # Follow-ups to an AI agent's answer. The planner and the safety gate still decide.
+    "downtime_estimate": ("Planner", "Route finder", "Safety gate"),
+    "downtime_expired":  ("Planner", "Route finder", "Safety gate"),
+    "ai_caution":        ("Planner", "Route finder", "Safety gate"),
+    "hold_released":     ("Planner", "Route finder", "Safety gate"),
+    "job_done":         ("Recovery monitor",),
+    "work_sample":      ("Recovery monitor",),
 }
 
 
-class Orchestrator(Agent):
+class Orchestrator(Role):
     name = "Orchestrator"
 
     def __init__(self, run: Run, memory: Memory) -> None:
         super().__init__(run, memory)
-        self.recovery = RecoveryAgent(run, memory)
-        self.fleet = FleetAgent(run, memory)
-        self.navigation = NavigationAgent(run, memory)
-        self.safety = SafetyAgent(run, memory)
-        self._first_responder = {"Recovery": self.recovery, "Navigation": self.navigation}
+        self.recovery = RecoveryMonitor(run, memory)
+        self.fleet = FleetPlanner(run, memory)
+        self.navigation = RouteFinder(run, memory)
+        self.safety = SafetyGate(run, memory)
+        self._first_responder = {"Recovery monitor": self.recovery, "Route finder": self.navigation}
 
     def handle(self, events: list[dict]) -> Cycle:
         """Handle events that arrived together. They share one re-plan."""
@@ -51,11 +56,11 @@ class Orchestrator(Agent):
         needs_plan = False
         for event in events:
             route = ROUTES[event["type"]]
-            replans = "Fleet" in route
+            replans = "Planner" in route
             self.say("route", f"{event['type']}: {', '.join(route)}"
                               f"{', dispatch' if replans else ''}.", route=list(route))
             # Agents listed before Fleet act on the event itself.
-            for name in route[: route.index("Fleet")] if replans else route:
+            for name in route[: route.index("Planner")] if replans else route:
                 self._first_responder[name].on_event(cycle, event)
             needs_plan = needs_plan or replans
         if needs_plan:
@@ -88,6 +93,8 @@ class Orchestrator(Agent):
                         cycle.safety.summary(), ms)
         for extra in cycle.events[1:]:
             story["headline"] += " " + explain(self.farm, cycle.world, old, cycle.plan, extra)["headline"]
+        if cycle.events[0].get("headline"):
+            story["headline"] = cycle.events[0]["headline"]
         run.explanation = story
         run.safety = cycle.safety.to_dict()
         run.replans.append({
@@ -113,5 +120,5 @@ class Orchestrator(Agent):
                 tractor.stop()
                 stopped.append(self.tractor_name(tractor_id))
         run.safety = cycle.safety.to_dict()
-        self.say("stand_down", "No plan passed the Safety agent, so none was sent. Stopped: "
+        self.say("stand_down", "No plan passed the Safety gate, so none was sent. Stopped: "
                                f"{', '.join(stopped) or 'nobody'}. Tractors mid-job finish that job.")

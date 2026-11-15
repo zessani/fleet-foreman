@@ -41,6 +41,7 @@ class SimTractor:
         self.leg_t = 0.0               # minutes spent on the current leg
         self.queue: list[list] = []    # pending [kind, minutes_left] service items
         self.rate = 0.0                # work rate in ha/min for the job in progress
+        self.session = [0.0, 0.0]      # hectares and minutes of the work session in progress
         # idle: no task while there is work it could do. unassigned: no task while any job remains.
         self.minutes = {"work": 0.0, "travel": 0.0, "service": 0.0, "wait": 0.0, "idle": 0.0,
                         "unassigned": 0.0}
@@ -151,6 +152,20 @@ class SimTractor:
     def _release_job(self) -> None:
         job = self.sim.jobs[self.cur["job"]]
         job.status, job.tractor = "pending", None
+        self._emit_work_sample(self.sim.now)
+
+    def _emit_work_sample(self, t: float) -> None:
+        """What this work session really achieved: the learning loop's raw data."""
+        hectares, minutes = self.session
+        self.session = [0.0, 0.0]
+        if minutes <= 0 or self.cur is None:
+            return
+        job = self.sim.farm.jobs[self.cur["job"]]
+        self.sim.events.append({
+            "t": t, "type": "work_sample", "tractor": self.id, "job": job.id,
+            "implement": self.mounted, "field": job.field,
+            "hectares": hectares, "minutes": minutes,
+        })
 
     def _abort_current(self) -> None:
         """Drop the current stop, but finish a road leg or service in progress."""
@@ -285,6 +300,8 @@ class SimTractor:
         need = state.remaining_ha / self.rate if self.rate > 0 else math.inf
         used = min(rem, need)
         covered = min(state.remaining_ha, self.rate * used)
+        self.session[0] += covered
+        self.session[1] += used
         self.sim.worked_ha[state.id] = self.sim.worked_ha.get(state.id, 0.0) + covered
         state.remaining_ha = max(0.0, state.remaining_ha - self.rate * used)
         self.fuel -= self.t.burn_work * used
@@ -294,6 +311,7 @@ class SimTractor:
             state.remaining_ha, state.status = 0.0, "done"
             state.done_at, state.tractor = t + used, self.id
             self.sim.events.append({"t": t + used, "type": "job_done", "tractor": self.id, "job": state.id})
+            self._emit_work_sample(t + used)
             self._clear_current()
         return used
 

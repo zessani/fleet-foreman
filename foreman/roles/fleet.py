@@ -6,16 +6,18 @@ Tools: the implement picker (foreman.model.pick_implement) and the planner
 
 from __future__ import annotations
 
-from foreman.agents.base import Agent, Cycle
+from foreman.roles.base import Cycle, Role
 from foreman.model import pick_implement, why_not
-from foreman.planner import CHANGE_LIGHT, CHANGE_STRICT, plan
+from foreman.model import clock
+from foreman.planner import CHANGE_LIGHT, CHANGE_STRICT, plan_with_return
 
 # After these events there is new capacity or new work, so the plan may rebalance.
-REBALANCE_EVENTS = {"jobs_submitted", "repaired", "job_added"}
+REBALANCE_EVENTS = {"jobs_submitted", "repaired", "job_added", "downtime_estimate",
+                    "downtime_expired", "ai_caution", "hold_released"}
 
 
-class FleetAgent(Agent):
-    name = "Fleet"
+class FleetPlanner(Role):
+    name = "Planner"
 
     def plan(self, cycle: Cycle) -> None:
         cycle.world = self.run.world()
@@ -23,8 +25,11 @@ class FleetAgent(Agent):
         cycle.change_cost = CHANGE_LIGHT if rebalance else CHANGE_STRICT
         previous = None if cycle.from_scratch else cycle.previous
         self._pick_implements(cycle)
-        cycle.plan = plan(self.farm, self.run.road_map, cycle.world, previous,
-                          change_cost=cycle.change_cost)
+        cycle.plan = plan_with_return(
+            self.farm, self.run.road_map, cycle.world, previous,
+            returning=self.run.returning, waiting_reason=self._waiting_reason, had=self.run.had,
+            speed_factor=self.run.speed_factor, change_cost=cycle.change_cost,
+            hold=self.run.ai_holds, spread_chain=self.run.spread_chain)
         planned = sum(len(route) for route in cycle.plan.routes.values())
         message = (f"Planned {planned} job(s) across {len(cycle.plan.routes)} tractor(s) in "
                    f"{cycle.plan.ms:.1f} ms.")
@@ -34,6 +39,11 @@ class FleetAgent(Agent):
         self.say("plan", message, planner_ms=round(cycle.plan.ms, 2), planned=planned)
         for job_id, reason in cycle.plan.held.items():
             self.say("job_held", f"{self.job_label(job_id)} is held: {reason}.", job=job_id)
+
+    def _waiting_reason(self, tractor_id: str) -> str:
+        back = clock(self.farm.day_start_min, self.run.returning[tractor_id])
+        return (f"waiting for {self.tractor_name(tractor_id)}, expected back {back} "
+                "(AI Recovery agent estimate)")
 
     def _pick_implements(self, cycle: Cycle) -> None:
         """Call the implement picker for every job that needs a tractor chosen."""

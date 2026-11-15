@@ -10,8 +10,12 @@ import json
 import threading
 from pathlib import Path
 
+from foreman.ai_base import ModelClient
+from foreman.ai_crew import AiCrew
 from foreman.day import Day
 from foreman.model import clock
+from foreman.nav import RoadMap
+from foreman.why import why
 
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIO_DIR = ROOT / "scenarios"
@@ -36,10 +40,16 @@ def default_scenario() -> Path:
 
 
 class Engine:
-    def __init__(self, scenario: Path | None = None, log_path: Path | None = None) -> None:
+    def __init__(self, scenario: Path | None = None, log_path: Path | None = None,
+                 client: ModelClient | None = None, learning=None,
+                 lessons_path: Path | None = None) -> None:
         # The clock thread and the request handlers both touch the engine.
         self._lock = threading.RLock()
         self._log_path = log_path
+        self._client = client          # the model behind the AI agents; None means they are off
+        self.learning = learning       # learned work rates, kept across days
+        self._lessons_path = lessons_path
+        self.day: Day | None = None
         self.running = False
         self.speed = DEFAULT_SPEED
         self.load(scenario or default_scenario())
@@ -54,7 +64,11 @@ class Engine:
     def reset(self) -> None:
         with self._lock:
             self.running = False
-            self.day = Day(self.raw, log_path=self._log_path)
+            if self.learning is not None:
+                self.learning.start_day()  # closes the day before, if it recorded anything
+                self.learning.save()
+            self.day = Day(self.raw, log_path=self._log_path, learning=self.learning,
+                           ai=AiCrew(self._client), lessons_path=self._lessons_path)
             self._full_days: dict[tuple[bool, int], dict] = {}  # report cache
 
     def control(self, action: str | None, speed: float | None = None) -> dict:
@@ -81,14 +95,17 @@ class Engine:
     def tick(self, real_seconds: float) -> None:
         """Called by the server clock. Moves the day forward if running."""
         with self._lock:
+            self.day.drain_ai()
             if self.running:
-                self.advance(real_seconds * self.speed)
+                self.advance(real_seconds * self.clock_speed)
 
     def advance(self, minutes: float) -> None:
         with self._lock:
             self.day.advance(minutes)
             if self.day.finished:
                 self.running = False
+                if self.learning is not None:
+                    self.learning.save()
 
     @property
     def now(self) -> float:
@@ -98,6 +115,42 @@ class Engine:
     def finished(self) -> bool:
         return self.day.finished
 
+    @property
+    def clock_speed(self) -> int:
+        """The clock drops to 1x while an AI agent is thinking, so its answer still matters."""
+        return 1 if self.day.ai_thinking() else self.speed
+
+    def why(self, job_id: str) -> dict:
+        """Why this job went to its tractor, and why not to each of the others."""
+        with self._lock:
+            run = self.day.foreman
+            return why(self.day.farm, self.day.road_map, run.world(), run.plan, job_id,
+                       speed_factor=run.speed_factor)
+
+    def learning_report(self) -> dict:
+        """What Foreman has learned: estimate error by day, learned work rates, AI lessons."""
+        with self._lock:
+            memory = self.day.memory
+            learned = self.learning.summary() if self.learning is not None else {"days": [], "factors": []}
+            return {
+                **learned,
+                "lessons": memory.lessons[-30:],
+                "downtime_estimates": {
+                    "count": len(memory.estimates),
+                    "avg_gap_min": memory.downtime_gap(),
+                    "items": memory.estimates[-30:],
+                },
+            }
+
+    def run_learning_days(self, days: int) -> list[dict]:
+        """Run several days off screen, hidden speed factors on, so the estimates improve."""
+        from foreman.learning import Learning, run_days
+
+        with self._lock:
+            if self.learning is None:
+                self.learning = Learning()
+            return run_days(self.raw, days, self.learning)
+
     def state(self) -> dict:
         with self._lock:
             day, farm = self.day, self.day.farm
@@ -106,12 +159,16 @@ class Engine:
                 "clock": clock(farm.day_start_min, day.now),
                 "running": self.running,
                 "speed": self.speed,
+                "clock_speed": self.clock_speed,
                 "finished": day.finished,
                 "scenario": self.scenario,
                 "farm": {
                     "name": farm.name,
                     "nodes": farm.raw["nodes"],
                     "roads": farm.raw.get("roads", []),
+                    "implements": farm.raw["implements"],
+                    "day_start_min": farm.day_start_min,
+                    "horizon_min": farm.horizon_min,
                     "blocked": sorted(sorted(road) for road in day.blocked),
                 },
                 "foreman": {
@@ -119,6 +176,8 @@ class Engine:
                     "explanation": day.foreman.explanation,
                     "safety": day.foreman.safety,
                     "log": day.memory.log.lines(LOG_LINES_IN_STATE),
+                    "ai": self._ai_block(),
+                    "reasoning": day.desk.crew.reasoning() if day.desk else [],
                 },
                 "baseline": day.baseline.block(),
             }
@@ -145,6 +204,16 @@ class Engine:
                 "plan_ms": replans[-1]["ms"] if replans else None,
                 "replans": replans,
             }
+
+    def _ai_block(self) -> dict:
+        day = self.day
+        return {
+            "enabled": day.desk is not None,
+            "thinking": day.ai_thinking(),
+            "model": day.desk.crew.model if day.desk else None,
+            "estimates": len(day.memory.estimates),
+            "downtime_gap_min": day.memory.downtime_gap(),
+        }
 
     def log_lines(self) -> list[dict]:
         with self._lock:

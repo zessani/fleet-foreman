@@ -1,12 +1,14 @@
 /*
  * Decisions panel (built by Zayyan; lives with the other panels).
  *
- * Shows what the agents just decided, from GET /api/state (CLAUDE.md 8c):
+ * Shows what the planner, the safety gate and the AI agents just decided, from
+ * GET /api/state (CLAUDE.md 8c):
  *   - the latest plan change: headline, one line per changed job, the summary,
  *     how many jobs moved and how many stayed, and the re-plan time
- *   - the Safety agent's result: passed or failed, and the nine checks
- *   - the agent log, newest first
- *   - an area for the AI agent's reasoning, which Phase 3 fills
+ *   - the safety gate's result: passed or failed, and the nine checks
+ *   - the activity log, newest first
+ *   - the AI agents card: thinking sign, estimate accuracy, and each model call
+ *     (state.foreman.ai and state.foreman.reasoning; both optional)
  *
  * To use it, add two lines to a page:
  *     <div id="decisions-panel"></div>
@@ -26,9 +28,16 @@
   const POLL_MS = 500;
   const LOG_LINES = 60;
   const AGENT_COLORS = {
-    Orchestrator: "#f0ae4d", Fleet: "#7fb2ff", Navigation: "#5ccfc0",
-    Safety: "#67c587", Recovery: "#ef8d68",
+    "Orchestrator": "#f0ae4d", "Planner": "#7fb2ff", "Route finder": "#5ccfc0",
+    "Safety gate": "#67c587", "Recovery monitor": "#ef8d68",
+    "AI Recovery agent": "#c79bff", "AI Safety agent": "#c79bff",
   };
+  const AI_COLOR = "#c79bff";
+  const STATUS = {
+    thinking: ["THINKING", "dp-st-think"], done: ["DONE", "dp-st-done"],
+    fallback: ["FELL BACK TO RULES", "dp-st-fail"],
+  };
+  const ACTION_TAGS = { warn: "WARN", hold_job: "HOLD JOB", request_replan: "RE-PLAN" };
 
   // Sizes come from the box the panel sits in (container queries), so it also
   // works in a narrow sidebar and not only at full page width.
@@ -42,6 +51,7 @@
 @container (max-width: 760px) {
   .dp { grid-template-columns: minmax(0, 1fr); }
   .dp-log-line { grid-template-columns: 4.2em minmax(0, 1fr); }
+  .dp-banner-text { font-size: clamp(20px, 7cqi, 28px); }
   .dp-log-line > :last-child { grid-column: 1 / -1; }
 }
 .dp * { box-sizing: border-box; }
@@ -76,15 +86,31 @@
 .dp-mark.dp-warn { color: var(--dp-accent); }
 .dp-detail { color: var(--dp-muted); font-size: 0.88em; }
 .dp-log { max-height: 46vh; overflow-y: auto; }
-.dp-log-line { display: grid; grid-template-columns: 4.2em 7.6em minmax(0, 1fr); gap: 10px;
+.dp-log-line { display: grid; grid-template-columns: 4.2em 10em minmax(0, 1fr); gap: 10px;
   padding: 6px 0; border-top: 1px solid var(--dp-line); font-size: clamp(13px, 1.3cqi, 18px);
   line-height: 1.35; }
 .dp-time { color: var(--dp-muted); font-variant-numeric: tabular-nums; }
 .dp-agent { font-weight: 700; }
-.dp-reasoning { min-height: 110px; border: 1px dashed var(--dp-line); border-radius: 6px;
-  padding: 12px; color: var(--dp-muted); font-size: clamp(14px, 1.4cqi, 19px);
-  white-space: pre-wrap; }
-.dp-reasoning.dp-filled { color: var(--dp-text); border-style: solid; }
+.dp-banner { border: 2px solid var(--dp-accent); border-radius: 8px; padding: 10px 14px;
+  margin: 0 0 12px; background: #3a2e18; animation: dp-pulse 1.6s ease-in-out infinite; }
+.dp-banner-text { font-size: clamp(22px, 2.8cqi, 36px); font-weight: 800; color: var(--dp-accent); }
+.dp-banner-sub { font-size: clamp(14px, 1.4cqi, 19px); color: var(--dp-text); margin-top: 4px; }
+@keyframes dp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .dp-banner { animation: none; } }
+.dp-muted { color: var(--dp-muted); font-size: clamp(14px, 1.4cqi, 19px); margin: 0; }
+.dp-call { border-top: 1px solid var(--dp-line); padding: 10px 0; font-size: clamp(14px, 1.4cqi, 19px);
+  line-height: 1.4; overflow-wrap: anywhere; }
+.dp-call > div { margin: 0 0 4px; }
+.dp-call-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.dp-call-agent { font-weight: 800; }
+.dp-call-status { border-radius: 6px; padding: 2px 8px; font-weight: 800; font-size: 0.85em;
+  letter-spacing: 0.03em; border: 1px solid; }
+.dp-st-think { color: var(--dp-accent); border-color: var(--dp-accent); }
+.dp-st-done { color: var(--dp-good); border-color: var(--dp-good); }
+.dp-st-fail { color: var(--dp-bad); border-color: var(--dp-bad); }
+.dp-call-bad { color: var(--dp-bad); }
+.dp-tag { display: inline-block; border: 1px solid var(--dp-line); border-radius: 4px;
+  padding: 0 6px; margin-right: 6px; font-size: 0.8em; font-weight: 800; color: var(--dp-accent); }
 .dp-status { grid-column: 1 / -1; font-size: 13px; color: var(--dp-muted); min-height: 1em; }
 .dp-status.dp-error { color: var(--dp-bad); font-weight: 700; }
 `;
@@ -132,17 +158,17 @@
     const changes = el("ul", "dp-list");
     change.box.append(headline, summary, chips, changes);
 
-    const safety = card("Safety agent");
+    const safety = card("Safety gate");
     const badge = el("div", "dp-badge dp-none", "NOT CHECKED YET");
     const safetyLine = el("p", "dp-line");
     const checks = el("div");
     safety.box.append(badge, safetyLine, checks);
 
-    const reasoning = card("AI agent reasoning");
-    const reasoningBody = el("div", "dp-reasoning");
+    const reasoning = card("AI agents");
+    const reasoningBody = el("div");
     reasoning.box.append(reasoningBody);
 
-    const log = card("Agent log", true);
+    const log = card("Activity log", true);
     const logBody = el("div", "dp-log");
     log.box.append(logBody);
 
@@ -153,7 +179,7 @@
               checks, safetyNote: safety.note, reasoningBody, reasoningNote: reasoning.note,
               logBody, logNote: log.note, status };
     lastKeys = {};
-    renderReasoning(null);
+    renderReasoning(null, null);
   }
 
   function changed(section, key) {
@@ -262,19 +288,99 @@
     });
   }
 
-  function renderReasoning(text) {
-    if (!changed("reasoning", text || "")) return;
-    if (text) {
-      parts.reasoningBody.textContent = text;
-      parts.reasoningBody.className = "dp-reasoning dp-filled";
-      parts.reasoningNote.textContent = "";
+  function line(cls, text) {
+    return el("div", cls, text);
+  }
+
+  function answerLines(call) {
+    const answer = call.answer;
+    const out = [];
+    if (answer == null) return out;
+    if (call.agent === "AI Recovery agent" && typeof answer === "object") {
+      const down = answer.expected_downtime_min != null ? answer.expected_downtime_min
+                 : answer.downtime_min;
+      out.push(line(null, "Severity: " + (answer.severity != null ? answer.severity : "unknown") +
+                          " · Expected downtime: " + (down != null ? down : "unknown") + " min"));
+      if (answer.reason) out.push(line(null, String(answer.reason)));
+      if (answer.lesson) out.push(line("dp-detail", "Lesson: " + answer.lesson));
+    } else if (call.agent === "AI Safety agent" && typeof answer === "object" &&
+               Array.isArray(answer.concerns)) {
+      if (!answer.concerns.length) {
+        out.push(line(null, "No concerns."));
+      } else {
+        answer.concerns.forEach(function (concern) {
+          const row = el("div");
+          const action = String(concern.action || "");
+          row.append(el("span", "dp-tag", ACTION_TAGS[action] || action.toUpperCase()));
+          const text = concern.concern != null ? concern.concern : concern.text;
+          row.append(document.createTextNode((text != null ? String(text) : "") +
+                     (concern.job ? " (" + concern.job + ")" : "")));
+          out.push(row);
+        });
+      }
     } else {
-      parts.reasoningBody.textContent =
-        "Nothing here yet. Every decision on this page is made by the planner and the rule " +
-        "checker, with no AI model. The AI agent's reasoning will appear here.";
-      parts.reasoningBody.className = "dp-reasoning";
-      parts.reasoningNote.textContent = "coming in Phase 3";
+      out.push(line("dp-detail", JSON.stringify(answer)));
     }
+    return out;
+  }
+
+  function callBlock(call) {
+    const box = el("div", "dp-call");
+    const head = el("div", "dp-call-head");
+    const name = el("span", "dp-call-agent", call.agent || "AI agent");
+    name.style.color = AGENT_COLORS[call.agent] || AI_COLOR;
+    const status = STATUS[call.status] || [String(call.status || "").toUpperCase(), "dp-st-think"];
+    head.append(name, el("span", "dp-time", call.clock || ""),
+                el("span", "dp-time", "Plan " + (call.plan_no != null ? call.plan_no : "?")),
+                el("span", "dp-call-status " + status[1], status[0]));
+    box.append(head);
+    if (call.input) box.append(line(null, "Read: " + call.input));
+    const names = [];
+    (call.tools || []).forEach(function (tool) {
+      if (tool && tool.name != null && names.indexOf(tool.name) < 0) names.push(tool.name);
+    });
+    if (names.length) {
+      const mode = String(call.tools_mode || "tools called");
+      box.append(line(null, mode.charAt(0).toUpperCase() + mode.slice(1) + ": " + names.join(", ")));
+    }
+    answerLines(call).forEach(function (row) { box.append(row); });
+    if (call.applied) box.append(line(null, "Did: " + call.applied));
+    if (call.status === "fallback") {
+      box.append(line("dp-call-bad", "Fell back to the rules: " + (call.error || "no answer")));
+    }
+    if (typeof call.ms === "number") box.append(line("dp-time", (call.ms / 1000).toFixed(1) + " s"));
+    return box;
+  }
+
+  function renderReasoning(aiState, reasoningState) {
+    const ai = aiState && typeof aiState === "object" ? aiState : {};
+    const calls = Array.isArray(reasoningState) ? reasoningState.slice(0, 10) : [];
+    if (!changed("reasoning", JSON.stringify([ai, calls]))) return;
+
+    parts.reasoningNote.textContent = ai.enabled && ai.model ? String(ai.model) : "";
+    const body = parts.reasoningBody;
+    body.textContent = "";
+    if (!ai.enabled) {
+      body.append(el("p", "dp-muted",
+        "AI agents are off. Every decision on this page is made by the planner and the safety gate."));
+      return;
+    }
+    if (ai.thinking) {
+      const banner = el("div", "dp-banner");
+      banner.setAttribute("role", "status");
+      banner.append(el("div", "dp-banner-text", "AI agent thinking…"),
+                    el("div", "dp-banner-sub",
+                       "The clock runs at 1× until it answers. The rule-based plan is already in force."));
+      body.append(banner);
+    }
+    if (ai.estimates > 0 && typeof ai.downtime_gap_min === "number") {
+      const chips = el("div", "dp-chips");
+      chips.append(el("span", "dp-chip", "Downtime estimates off by " + ai.downtime_gap_min +
+                      " min on average (" + ai.estimates + " so far)"));
+      body.append(chips);
+    }
+    if (!calls.length && !ai.thinking) body.append(el("p", "dp-muted", "No AI agent calls yet."));
+    calls.forEach(function (call) { if (call && typeof call === "object") body.append(callBlock(call)); });
   }
 
   function render(state) {
@@ -283,8 +389,7 @@
     renderChange(foreman);
     renderSafety(foreman);
     renderLog(foreman);
-    // Phase 3 will send the model's text in state.foreman.reasoning.
-    renderReasoning(typeof foreman.reasoning === "string" ? foreman.reasoning : null);
+    renderReasoning(foreman.ai, foreman.reasoning);
     parts.status.textContent = state && state.clock ? "As of " + state.clock : "";
     parts.status.className = "dp-status";
   }

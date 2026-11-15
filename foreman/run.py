@@ -29,6 +29,12 @@ class Run:
         self.explanation: dict = {}
         self.safety: dict = {"passed": None, "checks": []}
         self.replans: list[dict] = []    # one record per dispatched plan, for the proof run
+        self.speed_factor = None         # learned work-rate factors, when the learning loop is on
+        # Caution added by the AI agents. The planner still decides every assignment.
+        self.returning: dict[str, float] = {}  # broken tractor -> minute it is expected back
+        self.had: dict[str, list[str]] = {}    # broken tractor -> the jobs it had when it failed
+        self.ai_holds: dict[str, str] = {}     # job -> why the AI Safety agent holds it
+        self.spread_chain = False              # keep dependent jobs off one tractor
 
     @property
     def now(self) -> float:

@@ -44,6 +44,33 @@ class EventLog:
 
 
 class Memory:
-    def __init__(self, day_start_min: float, log_path: Path | None = None) -> None:
+    def __init__(self, day_start_min: float, log_path: Path | None = None,
+                 lessons_path: Path | None = None) -> None:
         self.log = EventLog(day_start_min, log_path)
         self.incidents: list[dict] = []  # one entry per breakdown, with a one-line lesson
+        self.estimates: list[dict] = []  # AI Recovery agent downtime estimates against the real repair time
+        self._lessons_path = lessons_path
+        self.lessons: list[dict] = self._load_lessons()  # written by the AI agents, kept across days
+
+    def _load_lessons(self) -> list[dict]:
+        if self._lessons_path is None or not self._lessons_path.exists():
+            return []
+        lessons = []
+        for line in self._lessons_path.read_text(encoding="utf-8").splitlines():
+            try:
+                lessons.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue  # a damaged line must not stop the day
+        return lessons
+
+    def add_lesson(self, lesson: dict) -> None:
+        self.lessons.append(lesson)
+        if self._lessons_path is not None:
+            self._lessons_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._lessons_path, "a", encoding="utf-8") as lessons_file:
+                lessons_file.write(json.dumps(lesson) + "\n")
+
+    def downtime_gap(self) -> float | None:
+        """Average minutes between the AI Recovery agent's estimate and the real repair time."""
+        gaps = [entry["gap_min"] for entry in self.estimates]
+        return round(sum(gaps) / len(gaps), 1) if gaps else None

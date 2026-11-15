@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import math
 
-from foreman.agents.base import Agent, Cycle
+from foreman.roles.base import Cycle, Role
 from foreman.state import Plan, Stop
 
 
-class NavigationAgent(Agent):
-    name = "Navigation"
+class RouteFinder(Role):
+    name = "Route finder"
 
     def on_event(self, cycle: Cycle, event: dict) -> None:
         """A road closed or reopened: update the road map before anyone plans."""

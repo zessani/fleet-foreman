@@ -128,10 +128,10 @@ def test_singular_and_plural(farm: Farm, first: Plan) -> None:
 def test_keys_and_rounding(farm: Farm, first: Plan) -> None:
     world = WorldState.start_of_day(farm)
     result = explain(farm, world, first, first, {"type": "repaired", "tractor": "T2"},
-                     safety_line="Safety Agent passed 9 of 9 checks.", ms=12.3456)
+                     safety_line="Safety gate passed 9 of 9 checks.", ms=12.3456)
     assert set(result) == KEYS
     assert result["ms"] == 12.3
-    assert result["safety"] == "Safety Agent passed 9 of 9 checks."
+    assert result["safety"] == "Safety gate passed 9 of 9 checks."
     assert result["headline"] == "Bolt is back in service at 06:00."
     assert result["unchanged"] == len(farm.jobs)
     assert result["summary"].startswith("0 jobs moved, 0 retimed, 5 unchanged.")

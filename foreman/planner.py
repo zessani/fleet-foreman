@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import math
 import time
+from types import SimpleNamespace
 from typing import Callable
 
 from foreman.evaluator import W_UNPLANNED, Evaluator, Order, SpeedFactor
 from foreman.model import Farm
 from foreman.nav import RoadMap
-from foreman.state import Plan, WorldState
+from foreman.state import Plan, TractorState, WorldState
 
 MAX_SEARCH_PASSES = 50  # a stop so a re-plan always returns quickly
 MIN_GAIN = 1e-6         # ignore "improvements" that are only rounding noise
@@ -29,19 +30,29 @@ MIN_GAIN = 1e-6         # ignore "improvements" that are only rounding noise
 CHANGE_STRICT = 500.0
 # Light lets the plan rebalance when capacity comes back or new work arrives.
 CHANGE_LIGHT = 15.0
+# Caution cost per job that sits on the same tractor as the job it depends on:
+# one breakdown of that tractor would then stall the whole chain.
+CHAIN_COST = 300.0
+# Waiting for a tractor that is expected back must beat moving its work by this much.
+WAIT_MARGIN = 10.0
 
 Score = Callable[[Order], "float | None"]
 
 
 def plan(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None = None,
          speed_factor: SpeedFactor | None = None, local_search: bool = True,
-         change_cost: float = CHANGE_STRICT) -> Plan:
+         change_cost: float = CHANGE_STRICT, hold: dict[str, str] | None = None,
+         spread_chain: bool = False) -> Plan:
     """Build a plan for every unfinished job from the current state.
 
     previous is the plan being replaced. The new plan starts from it and pays
     change_cost for each job it moves to a different tractor, so a re-plan
     changes as little as possible. The result depends only on the inputs:
     same input, same plan.
+
+    hold names jobs that must not be planned for now, with the reason.
+    spread_chain adds a caution cost for keeping a job and the job that
+    depends on it on one tractor.
     """
     started = time.perf_counter()
     evaluator = Evaluator(farm, road_map, world, speed_factor)
@@ -55,13 +66,18 @@ def plan(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None
             order[tractor_id].append(busy_job)
             locked[tractor_id] = 1
 
+    in_progress = {job_id for route in order.values() for job_id in route}
+    on_hold = {job_id: reason for job_id, reason in (hold or {}).items()
+               if job_id in evaluator.open_jobs and job_id not in in_progress}
     home = _previous_tractors(previous, evaluator)
-    score = _scorer(evaluator, home, change_cost)
-    _seed_from_previous(previous, evaluator, order, locked)
+    score = _scorer(farm, evaluator, home, change_cost, spread_chain)
+    _seed_from_previous(previous, evaluator, order, locked, set(on_hold))
 
     placed = {job_id for route in order.values() for job_id in route}
-    waiting = sorted(evaluator.open_jobs - placed, key=lambda job_id: farm.jobs[job_id].order)
-    held = _insert_all(farm, world, evaluator, score, order, locked, waiting)
+    waiting = sorted(evaluator.open_jobs - placed - set(on_hold),
+                     key=lambda job_id: farm.jobs[job_id].order)
+    held = dict(on_hold)
+    held.update(_insert_all(farm, world, evaluator, score, order, locked, waiting, set(on_hold)))
 
     if local_search:
         _improve(evaluator, score, order, locked)
@@ -90,28 +106,36 @@ def _previous_tractors(previous: Plan | None, evaluator: Evaluator) -> dict[str,
     }
 
 
-def _scorer(evaluator: Evaluator, home: dict[str, str], change_cost: float) -> Score:
-    """The evaluator's cost, plus a charge for each job moved off its previous tractor."""
-    if not home or change_cost <= 0:
+def _scorer(farm: Farm, evaluator: Evaluator, home: dict[str, str], change_cost: float,
+            spread_chain: bool) -> Score:
+    """The evaluator's cost, plus a charge for each job moved off its previous tractor
+    and, when asked for, for each job kept on the same tractor as the job it depends on."""
+    charge_moves = bool(home) and change_cost > 0
+    if not charge_moves and not spread_chain:
         return evaluator.cost
+    after_of = {job_id: farm.jobs[job_id].after for job_id in evaluator.open_jobs}
 
     def score(order: Order) -> float | None:
         cost = evaluator.cost(order)
         if cost is None:
             return None
-        moved = 0
+        moved = chained = 0
         for tractor_id, route in order.items():
+            on_this_tractor = set(route)
             for job_id in route:
                 was_on = home.get(job_id)
                 if was_on is not None and was_on != tractor_id:
                     moved += 1
-        return cost + change_cost * moved
+                if after_of.get(job_id) in on_this_tractor:
+                    chained += 1
+        extra = change_cost * moved if charge_moves else 0.0
+        return cost + extra + (CHAIN_COST * chained if spread_chain else 0.0)
 
     return score
 
 
 def _seed_from_previous(previous: Plan | None, evaluator: Evaluator, order: Order,
-                        locked: dict[str, int]) -> None:
+                        locked: dict[str, int], on_hold: set[str]) -> None:
     """Start each tractor with the unfinished jobs it already had, in the same order."""
     if previous is None:
         return
@@ -120,7 +144,7 @@ def _seed_from_previous(previous: Plan | None, evaluator: Evaluator, order: Orde
     for tractor_id in evaluator.tractor_ids:
         for stop in previous.routes.get(tractor_id, []):
             if (stop.job in evaluator.open_jobs and stop.job not in in_progress
-                    and evaluator.can_do(tractor_id, stop.job)):
+                    and stop.job not in on_hold and evaluator.can_do(tractor_id, stop.job)):
                 seeded[tractor_id].append(stop.job)
     # The old routes may no longer be possible (a predecessor lost its tractor,
     # say). Then start from the locked work alone and insert everything fresh.
@@ -130,7 +154,8 @@ def _seed_from_previous(previous: Plan | None, evaluator: Evaluator, order: Orde
 
 
 def _insert_all(farm: Farm, world: WorldState, evaluator: Evaluator, score: Score, order: Order,
-                locked: dict[str, int], waiting: list[str]) -> dict[str, str]:
+                locked: dict[str, int], waiting: list[str],
+                on_hold: set[str] = frozenset()) -> dict[str, str]:
     """Regret insertion. Returns the jobs that could not be placed, with the reason."""
     held: dict[str, str] = {}
     for job_id in list(waiting):
@@ -162,7 +187,7 @@ def _insert_all(farm: Farm, world: WorldState, evaluator: Evaluator, score: Scor
 
     for job_id in waiting:
         after = farm.jobs[job_id].after
-        if after in held or after in waiting:
+        if after in held or after in waiting or after in on_hold:
             held[job_id] = f"must follow {after}, which is held"
         else:
             held[job_id] = "no tractor can fit it in within the fuel rules"
@@ -250,6 +275,78 @@ def _best_swap(evaluator: Evaluator, score: Score, order: Order, locked: dict[st
             if cost is not None and cost < threshold:
                 best, threshold = (cost, first, i, second, j), cost
     return best
+
+
+def plan_with_return(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None,
+                     returning: dict[str, float], waiting_reason: Callable[[str], str],
+                     had: dict[str, list[str]] | None = None, **options) -> Plan:
+    """Plan when some broken tractors are expected back at a known time.
+
+    Two plans are made by the normal planner and compared by its normal cost:
+    move the work to the other tractors now, or count the returning tractors in
+    from the time they are expected back. If waiting is cheaper, the work that
+    falls to a returning tractor is held for it (it gets no jobs until it is
+    actually back), and so is any job that depends on held work.
+
+    had lists the jobs each returning tractor was doing before it broke, so the
+    "wait" plan starts from giving it its own work back.
+    """
+    move = plan(farm, road_map, world, previous, **options)
+    returning = {t: back for t, back in returning.items()
+                 if t in world.tractors and not world.tractors[t].available and back > world.now}
+    if not returning:
+        return move
+
+    hopeful = WorldState(world.now, dict(world.tractors), world.jobs)
+    for tractor_id, back_at in returning.items():
+        state = world.tractors[tractor_id]
+        hopeful.tractors[tractor_id] = TractorState(tractor_id, state.node, back_at, state.fuel,
+                                                    state.mounted, available=True)
+    wait_options = {**options, "change_cost": CHANGE_LIGHT}
+    wait = plan(farm, road_map, hopeful, _own_work_back(move, returning, had or {}),
+                **wait_options)
+    # Both are scored in the same world (the tractor counted in from its return
+    # time), or the extra tractor's idle time would make waiting look worse.
+    move_order = {**{t: [] for t in returning}, **move.job_order()}
+    move_cost = Evaluator(farm, road_map, hopeful, options.get("speed_factor")).cost(move_order)
+    uses_returning = any(wait.routes.get(t) for t in returning)
+    if move_cost is None or not uses_returning or wait.cost + WAIT_MARGIN >= move_cost:
+        return move
+
+    held = dict(wait.held)
+    for tractor_id in returning:
+        for stop in wait.routes.get(tractor_id, []):
+            held[stop.job] = waiting_reason(tractor_id)
+    order = {tractor_id: [stop.job for stop in route if stop.job not in held]
+             for tractor_id, route in wait.routes.items() if tractor_id not in returning}
+    # A job cannot run before the job it depends on, so it waits too.
+    changed = True
+    while changed:
+        changed = False
+        for route in order.values():
+            for job_id in list(route):
+                after = farm.jobs[job_id].after
+                if after in held:
+                    held[job_id] = f"must follow {after}, which is held"
+                    route.remove(job_id)
+                    changed = True
+    schedule = Evaluator(farm, road_map, world, options.get("speed_factor")).schedule(order)
+    if schedule is None:
+        return move
+    return Plan(created_at=world.now, routes=schedule.routes, held=held, cost=wait.cost,
+                ms=move.ms + wait.ms)
+
+
+def _own_work_back(move: Plan, returning: dict[str, float], had: dict[str, list[str]]):
+    """A starting point for the "wait" plan: each returning tractor gets back the jobs
+    it had, and the others keep what the "move" plan gave them, minus those jobs."""
+    given_back = {job_id for tractor_id in returning for job_id in had.get(tractor_id, [])}
+    routes = {tractor_id: [SimpleNamespace(job=stop.job) for stop in route
+                           if stop.job not in given_back]
+              for tractor_id, route in move.routes.items()}
+    for tractor_id in returning:
+        routes[tractor_id] = [SimpleNamespace(job=job_id) for job_id in had.get(tractor_id, [])]
+    return SimpleNamespace(routes=routes)
 
 
 def no_tractor_reason(farm: Farm, world: WorldState, job_id: str) -> str:

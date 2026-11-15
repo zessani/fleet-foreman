@@ -219,14 +219,19 @@ def test_a_silent_failure_is_caught_by_lack_of_progress() -> None:
 def test_events_from_the_operator_are_applied_to_both_worlds() -> None:
     day = Day(example_raw())
     day.advance(30)
-    assert day.apply({"type": "breakdown", "tractor": "T2"}) == {"ok": True, "at": 30.0}
+    reply = day.apply({"type": "breakdown", "tractor": "T2"})
+    assert reply["ok"] is True and reply["at"] == 30.0
+    assert reply["report"]  # a breakdown from the dashboard comes with a fault report
     assert day.apply({"type": "breakdown", "tractor": "T9"})["ok"] is False
     assert day.apply({"type": "nonsense"})["ok"] is False
     day.advance(2)
     for run in (day.foreman, day.baseline):
         assert run.sim.tractors["T2"].status()["state"] == "broken"
         assert all(stop.tractor != "T2" for stop in run.plan.stops())
-    assert day.manual == [{"type": "breakdown", "tractor": "T2", "at": 30.0}]
+    assert len(day.manual) == 1
+    sent = day.manual[0]
+    assert (sent["type"], sent["tractor"], sent["at"]) == ("breakdown", "T2", 30.0)
+    assert sent["report"] == reply["report"] and "repair_after_min" in sent
 
 
 def test_priority_change_and_new_job_trigger_a_replan() -> None:

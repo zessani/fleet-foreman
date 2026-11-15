@@ -55,7 +55,7 @@ def test_untouched_plan_passes_everything(farm, road_map, world, plan):
     assert [c.id for c in report.checks] == list(range(1, 10))
     assert all(c.passed for c in report.checks), [c.detail for c in report.checks if not c.passed]
     assert report.passed
-    assert report.summary() == "Safety Agent passed 9 of 9 checks."
+    assert report.summary() == "Safety gate passed 9 of 9 checks."
 
 
 def test_rule_1_job_on_two_tractors(farm, road_map, world, plan):
@@ -159,7 +159,7 @@ def test_rule_9_deadline_is_only_a_warning(farm, road_map, world, plan):
     assert report.passed
     assert failed_ids(report) == [9]
     assert report.failures() == []
-    assert report.summary() == "Safety Agent passed 8 of 9 checks."
+    assert report.summary() == "Safety gate passed 8 of 9 checks."
 
 
 def test_to_dict_shape(farm, road_map, world, plan):

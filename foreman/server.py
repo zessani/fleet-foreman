@@ -19,14 +19,21 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from foreman.engine import EVENT_LOG_PATH, Engine, find_scenario
+from foreman.engine import EVENT_LOG_PATH, ROOT, Engine, find_scenario
+from foreman.learning import Learning
+from foreman.llm import get_client, load_env_file
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 HOST = "127.0.0.1"
 PORT = 8000
 TICK_SECONDS = 0.1
 
-engine = Engine(log_path=EVENT_LOG_PATH)
+# The model key is read from .env into the environment once, here. It is never
+# logged, written anywhere, or put in the state. With no key the AI agents are off.
+load_env_file(ROOT / ".env")
+engine = Engine(log_path=EVENT_LOG_PATH, client=get_client(),
+                learning=Learning(ROOT / "runs" / "learned.json"),
+                lessons_path=ROOT / "runs" / "lessons.jsonl")
 
 
 def _clock_loop(stop: threading.Event) -> None:
@@ -64,6 +71,30 @@ def get_report() -> dict:
 def get_log() -> str:
     """The event log as JSON Lines, one decision per line. This is the hand-in log."""
     return "".join(json.dumps(line) + "\n" for line in engine.log_lines())
+
+
+@app.get("/api/why")
+def get_why(job: str) -> dict:
+    """Why this job went to its tractor, and the real reason for every other tractor."""
+    try:
+        return engine.why(job)
+    except KeyError:
+        return {"ok": False, "error": f"no job named {job}"}
+
+
+@app.get("/api/learning")
+def get_learning() -> dict:
+    """Estimate error per day, learned work rates, AI lessons, and AI downtime estimate accuracy."""
+    return engine.learning_report()
+
+
+@app.post("/api/learning/run")
+def post_learning_run(body: dict[str, Any]) -> dict:
+    """{days}: run that many days off screen with hidden speed factors on, and learn from them."""
+    days = body.get("days", 5)
+    if not isinstance(days, int) or not 1 <= days <= 30:
+        return {"ok": False, "error": "days must be a whole number from 1 to 30"}
+    return {"ok": True, "days": engine.run_learning_days(days)}
 
 
 @app.post("/api/control")

@@ -5,12 +5,12 @@ Tool: the tractor status feed (foreman/watch.py).
 
 from __future__ import annotations
 
-from foreman.agents.base import Agent, Cycle
+from foreman.roles.base import Cycle, Role
 from foreman.watch import STALL_MIN
 
 
-class RecoveryAgent(Agent):
-    name = "Recovery"
+class RecoveryMonitor(Role):
+    name = "Recovery monitor"
 
     def watch(self) -> list[dict]:
         """Read the status feed. Returns the breakdown and repaired events it found."""
@@ -70,6 +70,8 @@ class RecoveryAgent(Agent):
     def note_progress(self, sim_events: list[dict]) -> None:
         """job_started and job_done from the tractors. Logged; no re-plan."""
         for event in sim_events:
+            if event["type"] not in ("job_started", "job_done"):
+                continue
             name, label = self.tractor_name(event["tractor"]), self.job_label(event["job"])
             verb = "started" if event["type"] == "job_started" else "finished"
             self.memory.log.append(event["t"], self.name, event["type"], f"{name} {verb}: {label}.")
