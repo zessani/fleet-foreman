@@ -102,6 +102,9 @@ def test_a_short_downtime_estimate_holds_the_work_for_the_tractor(tmp_path) -> N
     assert job.status == "done" and job.tractor == "T1"  # Atlas came back and finished its own field
     assert day.memory.estimates == [{"tractor": "Atlas", "estimate_min": 20, "actual_min": 20, "gap_min": 0}]
     assert day.memory.lessons[0]["lesson"] == "Carry a spare lift hose."
+    # Once the tractor is back, the real repair time is saved next to the estimate.
+    assert day.memory.lessons[1]["actual_downtime_min"] == 20
+    assert day.memory.lessons[1]["estimated_min"] == 20
     assert "Carry a spare lift hose." in (tmp_path / "lessons.jsonl").read_text()
     check_clean(day)
 

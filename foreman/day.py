@@ -97,6 +97,22 @@ class Day:
         self._pending.append(event)
         self._pending.sort(key=lambda item: item["at"])
 
+    def note_actual_downtime(self, tractor_id: str) -> None:
+        """Once a tractor is back, save how long the repair really took next to the estimate,
+        so the AI Recovery agent's next estimate for this kind of fault can be better."""
+        fault = self.faults.get(tractor_id)
+        if (fault is None or fault.get("noted") or fault.get("repaired_at") is None
+                or fault.get("estimate_min") is None):
+            return
+        fault["noted"] = True
+        actual = round(fault["repaired_at"] - fault["at"])
+        self.memory.add_lesson({
+            "tractor": self.farm.tractors[tractor_id].name, "report": fault["report"][:160],
+            "estimated_min": fault["estimate_min"], "actual_downtime_min": actual,
+            "lesson": f"This fault took {actual} min to repair. The estimate was "
+                      f"{fault['estimate_min']} min.",
+        })
+
     def job_label(self, job_id: str) -> str:
         job = self.farm.jobs[job_id]
         return f"{job.type.capitalize()} {self.farm.nodes[job.field].name}"
@@ -181,7 +197,8 @@ class Day:
         elif kind == "repair":
             for run in (self.foreman, self.baseline):
                 run.sim.tractors[event["tractor"]].repair()
-            self.faults.pop(event["tractor"], None)
+            if event["tractor"] in self.faults:
+                self.faults[event["tractor"]].setdefault("repaired_at", self.now)
         elif kind in ("block_road", "open_road"):
             name = "road_blocked" if kind == "block_road" else "road_opened"
             self._operator_event({"type": name, "a": event["a"], "b": event["b"]})
@@ -230,6 +247,7 @@ class Day:
         for event in events:
             if event["type"] == "repaired":
                 self.foreman.returning.pop(event["tractor"], None)  # it is back: no more waiting
+                self.note_actual_downtime(event["tractor"])
         if events:
             # Everything seen in the same reading shares one re-plan.
             self.handle(events)

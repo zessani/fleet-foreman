@@ -52,7 +52,7 @@ class AiDesk:
                                  f"{case.tractor_name}: {case.report}")
             self.crew.start("recovery", placeholder,
                             lambda case=case: diagnose(self.crew.client, case, self.crew.timeout_s),
-                            {"tractor": event["tractor"]})
+                            {"tractor": event["tractor"], "fault": fault})
 
     def after_dispatch(self) -> None:
         """Ask the AI Safety agent to look at the plan the safety gate just passed. Once per plan."""
@@ -88,17 +88,17 @@ class AiDesk:
                                   f"No usable answer ({call.error or 'no answer'}). "
                                   "The rule-based plan stands.")
                     elif kind == "recovery":
-                        self._apply_recovery(call, context["tractor"])
+                        self._apply_recovery(call, context["tractor"], context["fault"])
                     else:
                         self._apply_safety(call, context["plan_no"])
         finally:
             self._draining = False
 
-    def _apply_recovery(self, call: AiCall, tractor_id: str) -> None:
+    def _apply_recovery(self, call: AiCall, tractor_id: str, fault: dict) -> None:
         day, run, answer = self.day, self.day.foreman, call.answer
         name = day.farm.tractors[tractor_id].name
-        fault = day.faults.get(tractor_id, {})
         minutes = int(answer["downtime_min"])
+        fault["estimate_min"] = minutes
         day.memory.add_lesson({
             "tractor": name, "report": fault.get("report", "")[:160],
             "severity": answer["severity"], "downtime_min": minutes, "lesson": answer["lesson"],
@@ -130,6 +130,7 @@ class AiDesk:
                             f"The planner kept the work moved: waiting until {back_clock} "
                             "would cost more.")
         self._log(RECOVERY, "ai_applied", call.applied, tractor=tractor_id)
+        day.note_actual_downtime(tractor_id)  # in case the tractor was back before the answer
 
     def _apply_safety(self, call: AiCall, plan_no: int) -> None:
         day, run = self.day, self.day.foreman
