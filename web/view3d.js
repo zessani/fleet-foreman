@@ -61,7 +61,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const labelRenderer = new CSS2DRenderer({ element: $("labels") });
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xd9c7a8, 0.00034);
+scene.fog = new THREE.FogExp2(0xd9c7a8, 0.00024);
 const camera = new THREE.PerspectiveCamera(40, 1, 1, 14000);
 camera.position.set(120, 420, 620);
 
@@ -243,7 +243,8 @@ function buildFarm(farm) {
     tag.className = "fieldtag";
     tag.textContent = node.name || node.id;
     const label = new CSS2DObject(tag);
-    label.position.set(0, 0, 0.4);
+    label.position.set(0, side / 2, 0.1);   // on the north edge, so the name does not cover the field
+    label.center.set(0.5, 1.15);
     mesh.add(label);
     world.add(mesh, flash);
     fields[node.id] = { node, side, round, radius: side / 2, mesh, ctx, base, texture, key: "", flash, flashT: 0, S };
@@ -613,7 +614,8 @@ function makeTractor(t) {
   tag.className = "tag";
   view.tag = tag;
   const label = new CSS2DObject(tag);
-  label.position.set(0, 4.6, 0);
+  label.position.set(0, 4.4, 0);
+  label.center.set(0.5, 1.2);
   inner.add(label);
 
   // Dust (tilling) and mist (spraying): a few soft puffs recycled behind the implement.
@@ -963,11 +965,20 @@ const tmp = new THREE.Vector3(), dummy = new THREE.Object3D();
 
 function updateTractors(dt, iconScale, time) {
   if (!state) return;
+  // Tractors standing at the same node report the same point. They are drawn side by side.
+  const standing = {};
+  for (const t of state.foreman.tractors) {
+    if (t.status !== "traveling" && t.status !== "working") (standing[t.node] = standing[t.node] || []).push(t.id);
+  }
   for (const view of Object.values(tractors)) {
     const t = view.data, job = t.job ? state.jobById[t.job] : null;
     let working = false;
     view.target.copy(P(t.x, t.y));
     view.targetHeading = THREE.MathUtils.degToRad(t.heading || 0);
+    const group = standing[t.node] || [];
+    if (group.length > 1 && group.includes(t.id)) {
+      view.target.z += (group.indexOf(t.id) - (group.length - 1) / 2) * 0.75 * iconScale;
+    }
 
     if (t.status === "working" && job && fields[job.field]) {
       // Inside the field: on the pass that the job's percent done puts it on.

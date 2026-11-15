@@ -32,29 +32,31 @@
     { key: "violations",    label: "Rule violations",     better: "low",  unit: "" }
   ];
 
+  // Colors match the dashboard's dark theme (web/index.html :root tokens).
   var CSS = [
     ".np { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;",
-    "  color: #1a1a1a; background: #ffffff; border: 1px solid #d9d9d9; border-radius: 10px;",
-    "  padding: 16px; margin: 16px 0; max-width: 1100px; box-sizing: border-box; }",
-    ".np-title { font-size: clamp(18px, 2.4vw, 26px); font-weight: 700; margin: 0 0 12px; }",
+    "  color: #edf5ef; background: #19221e; border: 1px solid #34453c; border-radius: 8px;",
+    "  padding: 14px 16px; margin: 12px 0; max-width: 1100px; box-sizing: border-box; }",
+    ".np-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;",
+    "  color: #9fb0a5; margin: 0 0 10px; }",
     ".np-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));",
     "  gap: 6px; align-items: stretch; }",
-    ".np-head { font-size: clamp(12px, 1.5vw, 18px); font-weight: 700; color: #555;",
+    ".np-head { font-size: clamp(12px, 1.5vw, 16px); font-weight: 700; color: #9fb0a5;",
     "  text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 8px; }",
     ".np-head.np-num { text-align: right; }",
     ".np-label { font-size: clamp(14px, 2vw, 24px); font-weight: 600; padding: 10px 8px;",
-    "  display: flex; align-items: center; border-top: 1px solid #eee; }",
+    "  display: flex; align-items: center; border-top: 1px solid #2b3a33; }",
     ".np-cell { font-size: clamp(22px, 3.6vw, 44px); font-weight: 700; padding: 6px 12px;",
-    "  text-align: right; border-radius: 8px; font-variant-numeric: tabular-nums;",
+    "  text-align: right; border-radius: 6px; font-variant-numeric: tabular-nums;",
     "  display: flex; align-items: center; justify-content: flex-end; }",
-    ".np-win { background: #dff3e4; color: #12632c; }",
+    ".np-win { background: #223d2c; color: #7fd99a; box-shadow: inset 0 0 0 1px #67c58755; }",
     ".np-gain { font-size: clamp(16px, 2.4vw, 30px); font-weight: 700; padding: 6px 12px;",
     "  text-align: right; display: flex; align-items: center; justify-content: flex-end;",
-    "  font-variant-numeric: tabular-nums; color: #555; }",
-    ".np-gain.np-good { color: #12632c; }",
-    ".np-gain.np-bad { color: #a12b1f; }",
-    ".np-status { font-size: 14px; color: #777; margin-top: 10px; min-height: 1em; }",
-    ".np-status.np-error { color: #b00020; font-weight: 700; }"
+    "  font-variant-numeric: tabular-nums; color: #9fb0a5; }",
+    ".np-gain.np-good { color: #67c587; }",
+    ".np-gain.np-bad { color: #ef6d68; }",
+    ".np-status { font-size: 13px; color: #9fb0a5; margin-top: 10px; min-height: 1em; }",
+    ".np-status.np-error { color: #ef6d68; font-weight: 700; }"
   ].join("\n");
 
   var cells = {};   // cells[key] = {foreman, baseline, gain}
