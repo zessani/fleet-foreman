@@ -25,7 +25,8 @@ W_UNPLANNED = 100_000.0  # per priority point of a job left out
 W_LATE_JOB = 2_000.0     # per priority point of a job that misses its deadline
 W_LATE_MIN = 20.0        # per priority point, per minute late
 W_DRIVE = 1.0            # per minute of travel or yard service
-W_WAIT = 0.4             # per minute waiting at a field, or idle while jobs remain
+W_WAIT = 0.7             # per minute waiting at a field, or idle while jobs remain.
+                         # Chosen by `python -m foreman.sweep` over every test day.
 W_EARLY = 0.01           # per priority point, per minute until a job finishes
 
 # (tractor id, implement id, field id) -> multiplier on the catalog work rate.

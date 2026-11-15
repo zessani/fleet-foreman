@@ -456,6 +456,21 @@ Measured on the same farm with the same events, Foreman against the baseline.
 | Yard service minutes | Time spent on implement swaps and refuels |
 | Wasted minutes | Travel + idle + yard service. Machine time that covered no ground |
 | Day finish time | The minute the last job finished (the time so far while jobs remain) |
+
+**Known limits.** From `python -m foreman.sweep`: 196 test days on 6 farms
+(each farm run quiet, and with each tractor breaking at 10 different times),
+hidden factors off, idle weight 0.7. Zero rule violations on every day.
+- On 2 of the 196 days the baseline finishes more jobs on time than Foreman.
+  Both are on the example farm when Cedar (T3) breaks early, at minute 45 or
+  minute 70: Foreman 3 of 5 on time, baseline 4 of 5. The day plan gives Cedar
+  both the tilling and the planting on West Bench. When Cedar breaks, Atlas is
+  already committed to a long mowing job and cannot take the tilling in time.
+  The planner does not hedge its day plan against a breakdown.
+- On 1 day (the ten-job test farm, Cedar breaks at minute 180) the baseline
+  finishes 9 jobs and Foreman finishes 8.
+- On 5 days the baseline wastes fewer minutes (travel + idle + service).
+- Over all 196 days: Foreman 1,946 jobs on time and 63,637 wasted minutes;
+  baseline 1,343 and 104,355.
 | Re-plan time | Milliseconds from event to dispatched plan |
 | Rule violations | Count from the referee. Target is zero |
 | Estimate error by day | How far predicted job times were from actual (learning loop) |

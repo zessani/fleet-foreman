@@ -5,8 +5,8 @@ Full context and formats are in CLAUDE.md.
 
 ## Status
 - Current phase: 2
-- Last merge: Merge 1 at 2:00 PM (zayyan, ahmed, vishva)
-- Blockers: dashboard speed options 10x and 30x are rejected by the server (it takes 1, 4, 16, 60)
+- Last merge: Merge 2 at 2:40 PM (zayyan, ahmed, vishva)
+- Blockers: the main page does not yet show the plan change, safety result or comparison numbers; the speed menu snaps back to the server's speed
 
 Only tick boxes in your own section. Zayyan updates Status at each merge.
 
