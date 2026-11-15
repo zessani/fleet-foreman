@@ -1,0 +1,73 @@
+{
+  "scenario": "busy_day.json",
+  "farm": "Saguaro Flats Farm, busy day",
+  "hidden_factors": false,
+  "events": [
+    "09:30 Cedar breaks down"
+  ],
+  "foreman": {
+    "jobs_done": 15,
+    "on_time": 13,
+    "travel_min": 168.4,
+    "idle_min": 17.7,
+    "unassigned_min": 0.0,
+    "service_min": 116.1,
+    "wasted_min": 302.1,
+    "finish_min": 660.0,
+    "working_share": 80.3,
+    "km": 84.3,
+    "violations": 0
+  },
+  "baseline": {
+    "jobs_done": 13,
+    "on_time": 9,
+    "travel_min": 152.8,
+    "idle_min": 135.9,
+    "unassigned_min": 0.0,
+    "service_min": 165.0,
+    "wasted_min": 453.8,
+    "finish_min": 660.0,
+    "working_share": 70.3,
+    "km": 77.2,
+    "violations": 0
+  },
+  "difference": {
+    "jobs_done": 2,
+    "on_time": 4,
+    "travel_min": 15.6,
+    "idle_min": -118.2,
+    "service_min": -48.9,
+    "wasted_min": -151.7,
+    "km": 7.1,
+    "working_share": 10.0,
+    "violations": 0
+  },
+  "replans": [
+    {
+      "t": 0.0,
+      "plan_no": 1,
+      "ms": 71.71,
+      "events": [
+        "jobs_submitted"
+      ],
+      "moved": 0,
+      "retimed": 0,
+      "unchanged": 0,
+      "held": 0,
+      "detection_min": 0.0
+    },
+    {
+      "t": 210.0,
+      "plan_no": 2,
+      "ms": 3.94,
+      "events": [
+        "breakdown"
+      ],
+      "moved": 3,
+      "retimed": 5,
+      "unchanged": 3,
+      "held": 0,
+      "detection_min": 0.0
+    }
+  ]
+}

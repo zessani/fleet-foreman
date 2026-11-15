@@ -1,0 +1,63 @@
+{"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "jobs_submitted", "message": "25 jobs submitted by the operator."}
+{"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "route", "message": "jobs_submitted: Planner, Route finder, Safety gate, dispatch.", "data": {"route": ["Planner", "Route finder", "Safety gate"]}}
+{"t": 0.0, "clock": "06:00", "agent": "Planner", "event": "implements", "message": "Implement picker checked 25 job(s) against 5 tractor(s)."}
+{"t": 0.0, "clock": "06:00", "agent": "Planner", "event": "plan", "message": "Planned 25 job(s) across 5 tractor(s) in 357.1 ms.", "data": {"planner_ms": 357.08, "planned": 25}}
+{"t": 0.0, "clock": "06:00", "agent": "Route finder", "event": "routes", "message": "25 route(s) set, 160.4 km of road travel. No two tractors are in the same field at once.", "data": {"km": 160.43}}
+{"t": 0.0, "clock": "06:00", "agent": "Safety gate", "event": "plan_passed", "message": "Safety gate passed 8 of 9 checks. Warning: J16 on T1 is 152 min late; J5 on T3 is 120 min late; J20 on T5 is 146 min late"}
+{"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "dispatch", "message": "Plan 1 sent to Atlas, Bolt, Cedar, Dune, Ember. 0 moved, 0 stayed with their tractor. Event to dispatch: 357.4 ms.", "data": {"plan_no": 1, "ms": 357.39}}
+{"t": 8.47, "clock": "06:08", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Spray Canal Strip."}
+{"t": 29.69, "clock": "06:29", "agent": "Recovery monitor", "event": "job_started", "message": "Dune started: Till Old Homestead."}
+{"t": 32.41, "clock": "06:32", "agent": "Recovery monitor", "event": "job_started", "message": "Ember started: Till North 40."}
+{"t": 34.69, "clock": "06:34", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Spray South Pivot."}
+{"t": 36.25, "clock": "06:36", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Spray Canal Strip."}
+{"t": 36.5, "clock": "06:36", "agent": "Recovery monitor", "event": "job_started", "message": "Cedar started: Till Canal Strip."}
+{"t": 47.71, "clock": "06:47", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Spray South Pivot."}
+{"t": 51.81, "clock": "06:51", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Spray Mesa Top."}
+{"t": 93.48, "clock": "07:33", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Spray Mesa Top."}
+{"t": 95.56, "clock": "07:35", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Spray West Bench."}
+{"t": 100.0, "clock": "07:40", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Till River Flat."}
+{"t": 137.23, "clock": "08:17", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Spray West Bench."}
+{"t": 141.08, "clock": "08:21", "agent": "Recovery monitor", "event": "job_done", "message": "Cedar finished: Till Canal Strip."}
+{"t": 142.19, "clock": "08:22", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Spray Upper Terrace."}
+{"t": 145.49, "clock": "08:25", "agent": "Recovery monitor", "event": "job_started", "message": "Cedar started: Till Windmill."}
+{"t": 180.39, "clock": "09:00", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Spray Upper Terrace."}
+{"t": 199.63, "clock": "09:19", "agent": "Recovery monitor", "event": "job_done", "message": "Dune finished: Till Old Homestead."}
+{"t": 208.88, "clock": "09:28", "agent": "Recovery monitor", "event": "job_done", "message": "Ember finished: Till North 40."}
+{"t": 221.07, "clock": "09:41", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Mow Canal Strip."}
+{"t": 256.86, "clock": "10:16", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Till River Flat."}
+{"t": 257.0, "clock": "10:17", "agent": "Recovery monitor", "event": "job_started", "message": "Dune started: Plant River Flat."}
+{"t": 264.45, "clock": "10:24", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Till Pecan Row."}
+{"t": 276.21, "clock": "10:36", "agent": "Recovery monitor", "event": "job_done", "message": "Cedar finished: Till Windmill."}
+{"t": 276.25, "clock": "10:36", "agent": "Recovery monitor", "event": "job_started", "message": "Ember started: Plant Windmill."}
+{"t": 282.49, "clock": "10:42", "agent": "Recovery monitor", "event": "job_started", "message": "Cedar started: Till South Pivot."}
+{"t": 315.0, "clock": "11:15", "agent": "Recovery monitor", "event": "failure_detected", "message": "Ember reported a fault. Detected 0.0 min after it happened.", "data": {"tractor": "T5", "cause": "fault", "detection_min": 0.0}}
+{"t": 315.0, "clock": "11:15", "agent": "Orchestrator", "event": "route", "message": "breakdown: Recovery monitor, Planner, Route finder, Safety gate, dispatch.", "data": {"route": ["Recovery monitor", "Planner", "Route finder", "Safety gate"]}}
+{"t": 315.0, "clock": "11:15", "agent": "Recovery monitor", "event": "incident", "message": "Ember is out of service. Plant Windmill stopped with 77% left; only that remainder is re-planned. 2 queued job(s) need a new tractor. Finished work is frozen.", "data": {"tractor": "T5", "job": "J9", "queued": ["J12", "J20"]}}
+{"t": 315.0, "clock": "11:15", "agent": "Planner", "event": "implements", "message": "Implement picker, Plant Windmill: Atlas has no plant implement; Bolt has no plant implement; Cedar can pull the 6 m row planter; Dune can pull the 8 m row planter; Ember is out of service.", "data": {"job": "J9"}}
+{"t": 315.0, "clock": "11:15", "agent": "Planner", "event": "implements", "message": "Implement picker, Plant Canal Strip: Atlas has no plant implement; Bolt has no plant implement; Cedar can pull the 6 m row planter; Dune can pull the 8 m row planter; Ember is out of service.", "data": {"job": "J12"}}
+{"t": 315.0, "clock": "11:15", "agent": "Planner", "event": "implements", "message": "Implement picker, Plant North 40: Atlas has no plant implement; Bolt has no plant implement; Cedar can pull the 6 m row planter; Dune can pull the 8 m row planter; Ember is out of service.", "data": {"job": "J20"}}
+{"t": 315.0, "clock": "11:15", "agent": "Planner", "event": "plan", "message": "Planned 15 job(s) across 4 tractor(s) in 12.3 ms. Kept the other tractors' work in place.", "data": {"planner_ms": 12.33, "planned": 15}}
+{"t": 315.0, "clock": "11:15", "agent": "Route finder", "event": "routes", "message": "15 route(s) set, 85.1 km of road travel. No two tractors are in the same field at once.", "data": {"km": 85.13}}
+{"t": 315.0, "clock": "11:15", "agent": "Safety gate", "event": "plan_passed", "message": "Safety gate passed 8 of 9 checks. Warning: J16 on T1 is 138 min late; J4 on T2 is 140 min late; J9 on T3 is 197 min late; J20 on T3 is 224 min late; J5 on T4 is 220 min late"}
+{"t": 315.0, "clock": "11:15", "agent": "Orchestrator", "event": "dispatch", "message": "Plan 2 sent to Atlas, Bolt, Cedar, Dune. 5 moved, 10 stayed with their tractor. Event to dispatch: 12.6 ms.", "data": {"plan_no": 2, "ms": 12.58}}
+{"t": 316.74, "clock": "11:16", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Till Pecan Row."}
+{"t": 321.91, "clock": "11:21", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Mow Canal Strip."}
+{"t": 333.92, "clock": "11:33", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Mow Lower Terrace."}
+{"t": 347.85, "clock": "11:47", "agent": "Recovery monitor", "event": "job_done", "message": "Cedar finished: Till South Pivot."}
+{"t": 373.13, "clock": "12:13", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Mow South Pivot."}
+{"t": 401.66, "clock": "12:41", "agent": "Recovery monitor", "event": "job_started", "message": "Cedar started: Plant Canal Strip."}
+{"t": 407.0, "clock": "12:47", "agent": "Recovery monitor", "event": "job_done", "message": "Dune finished: Plant River Flat."}
+{"t": 409.55, "clock": "12:49", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Mow Lower Terrace."}
+{"t": 415.15, "clock": "12:55", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Mow South Pivot."}
+{"t": 415.1, "clock": "12:55", "agent": "Recovery monitor", "event": "job_started", "message": "Dune started: Plant Pecan Row."}
+{"t": 422.56, "clock": "13:02", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Mow River Flat."}
+{"t": 437.11, "clock": "13:17", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Mow Mesa Top."}
+{"t": 465.1, "clock": "13:45", "agent": "Recovery monitor", "event": "job_done", "message": "Dune finished: Plant Pecan Row."}
+{"t": 492.27, "clock": "14:12", "agent": "Recovery monitor", "event": "job_started", "message": "Dune started: Plant Old Homestead."}
+{"t": 523.4, "clock": "14:43", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Mow River Flat."}
+{"t": 534.99, "clock": "14:54", "agent": "Recovery monitor", "event": "job_done", "message": "Cedar finished: Plant Canal Strip."}
+{"t": 539.41, "clock": "14:59", "agent": "Recovery monitor", "event": "job_started", "message": "Cedar started: Plant Windmill."}
+{"t": 573.42, "clock": "15:33", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Till West Bench."}
+{"t": 588.37, "clock": "15:48", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Mow Mesa Top."}
+{"t": 654.77, "clock": "16:54", "agent": "Recovery monitor", "event": "job_done", "message": "Dune finished: Plant Old Homestead."}
+{"t": 660.0, "clock": "17:00", "agent": "Orchestrator", "event": "day_complete", "message": "Day complete: 21 of 25 jobs finished."}

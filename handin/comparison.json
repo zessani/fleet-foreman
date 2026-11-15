@@ -1,0 +1,186 @@
+{
+  "scenarios": {
+    "sample_farm": {
+      "scenario": "sample_farm.json",
+      "farm": "Saguaro Flats Farm",
+      "hidden_factors": false,
+      "events": [
+        "09:30 Cedar breaks down"
+      ],
+      "foreman": {
+        "jobs_done": 10,
+        "on_time": 10,
+        "travel_min": 90.5,
+        "idle_min": 0.9,
+        "unassigned_min": 157.8,
+        "service_min": 110.0,
+        "wasted_min": 201.4,
+        "finish_min": 482.1,
+        "working_share": 80.2,
+        "km": 44.2,
+        "violations": 0
+      },
+      "baseline": {
+        "jobs_done": 10,
+        "on_time": 10,
+        "travel_min": 103.7,
+        "idle_min": 135.9,
+        "unassigned_min": 49.7,
+        "service_min": 70.0,
+        "wasted_min": 309.6,
+        "finish_min": 482.1,
+        "working_share": 72.5,
+        "km": 52.4,
+        "violations": 0
+      },
+      "difference": {
+        "jobs_done": 0,
+        "on_time": 0,
+        "travel_min": -13.2,
+        "idle_min": -135.0,
+        "service_min": 40.0,
+        "wasted_min": -108.2,
+        "km": -8.2,
+        "working_share": 7.7,
+        "violations": 0
+      },
+      "replans": [
+        {
+          "t": 0.0,
+          "plan_no": 1,
+          "ms": 7.43,
+          "events": [
+            "jobs_submitted"
+          ],
+          "moved": 0,
+          "retimed": 0,
+          "unchanged": 0,
+          "held": 0,
+          "detection_min": 0.0
+        },
+        {
+          "t": 210.0,
+          "plan_no": 2,
+          "ms": 0.31,
+          "events": [
+            "breakdown"
+          ],
+          "moved": 2,
+          "retimed": 0,
+          "unchanged": 3,
+          "held": 0,
+          "detection_min": 0.0
+        }
+      ]
+    },
+    "large_farm": {
+      "scenario": "large_farm.json",
+      "farm": "Coyote Hill Farm (random, seed 3)",
+      "hidden_factors": false,
+      "events": [
+        "11:15 Ember breaks down"
+      ],
+      "foreman": {
+        "jobs_done": 21,
+        "on_time": 20,
+        "travel_min": 305.3,
+        "idle_min": 42.2,
+        "unassigned_min": 71.6,
+        "service_min": 305.0,
+        "wasted_min": 652.5,
+        "finish_min": 660.0,
+        "working_share": 77.4,
+        "km": 155.8,
+        "violations": 0
+      },
+      "baseline": {
+        "jobs_done": 16,
+        "on_time": 13,
+        "travel_min": 319.9,
+        "idle_min": 547.2,
+        "unassigned_min": 0.0,
+        "service_min": 321.4,
+        "wasted_min": 1188.5,
+        "finish_min": 660.0,
+        "working_share": 59.8,
+        "km": 162.7,
+        "violations": 0
+      },
+      "difference": {
+        "jobs_done": 5,
+        "on_time": 7,
+        "travel_min": -14.6,
+        "idle_min": -505.0,
+        "service_min": -16.4,
+        "wasted_min": -536.0,
+        "km": -6.9,
+        "working_share": 17.6,
+        "violations": 0
+      },
+      "replans": [
+        {
+          "t": 0.0,
+          "plan_no": 1,
+          "ms": 357.39,
+          "events": [
+            "jobs_submitted"
+          ],
+          "moved": 0,
+          "retimed": 0,
+          "unchanged": 0,
+          "held": 0,
+          "detection_min": 0.0
+        },
+        {
+          "t": 315.0,
+          "plan_no": 2,
+          "ms": 12.58,
+          "events": [
+            "breakdown"
+          ],
+          "moved": 5,
+          "retimed": 1,
+          "unchanged": 9,
+          "held": 0,
+          "detection_min": 0.0
+        }
+      ]
+    }
+  },
+  "test_days": {
+    "days": 196,
+    "farms": 6,
+    "jobs_total": 2507,
+    "foreman": {
+      "on_time": 1946,
+      "wasted_min": 63637.00000000003,
+      "idle_min": 5361.200000000003,
+      "violations": 0,
+      "jobs_done": 2119,
+      "travel_min": 29043.300000000007,
+      "service_min": 29232.5
+    },
+    "baseline": {
+      "on_time": 1343,
+      "wasted_min": 104354.60000000012,
+      "idle_min": 38203.20000000001,
+      "violations": 0,
+      "jobs_done": 1824,
+      "travel_min": 30569.10000000002,
+      "service_min": 35583.099999999984
+    },
+    "difference": {
+      "on_time": 603,
+      "wasted_min": -40717.6,
+      "idle_min": -32842.0,
+      "violations": 0,
+      "jobs_done": 295,
+      "travel_min": -1525.8,
+      "service_min": -6350.6
+    },
+    "days_baseline_more_on_time": [
+      "example farm, Cedar breaks at minute 45",
+      "example farm, Cedar breaks at minute 70"
+    ]
+  }
+}
