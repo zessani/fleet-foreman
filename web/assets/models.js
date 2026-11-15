@@ -82,11 +82,11 @@ const MAT = {
 const IMAT = {
   sprayTank: surf(std(0xe9e5da, 0.35, 0.05), "paint", [1.5, 1.5]),
   sprayFrame: surf(std(0x2c3542, 0.5, 0.3), "steel"),
-  sprayAccent: surf(std(0xe2722b, 0.45, 0.1), "paint", [1.5, 1.5]),
-  mowRed: surf(std(0xb5312a, 0.42, 0.1, { side: THREE.DoubleSide }), "paint", [1.5, 1.5]),
-  discBlue: surf(std(0x1f4f8f, 0.42, 0.1), "paint", [1.5, 1.5]),
-  plantFrame: surf(std(0x2f4d6b, 0.45, 0.15), "paint", [1.5, 1.5]),
-  plantHopper: surf(std(0xe39a1c, 0.4, 0.05), "paint", [1.5, 1.5]),
+  sprayAccent: surf(std(0x7d848c, 0.45, 0.1), "paint", [1.5, 1.5]),
+  mowRed: surf(std(0x5b6168, 0.42, 0.1, { side: THREE.DoubleSide }), "paint", [1.5, 1.5]),
+  discBlue: surf(std(0x4a5058, 0.42, 0.1), "paint", [1.5, 1.5]),
+  plantFrame: surf(std(0x3f454c, 0.45, 0.15), "paint", [1.5, 1.5]),
+  plantHopper: surf(std(0xd9d4c4, 0.4, 0.05), "paint", [1.5, 1.5]),
 };
 
 // One painted material per body colour, shared between tractors.
@@ -718,7 +718,7 @@ export function buildYard() {
   // Diesel tank on a stand inside a bund, with a pump
   const tankGeo = new THREE.CylinderGeometry(1.05, 1.05, 4.2, 28);
   tankGeo.rotateZ(Math.PI / 2);
-  g.add(mesh(tankGeo, std(0x3e6b45, 0.45, 0.15), 26, 2.4, -6));
+  g.add(mesh(tankGeo, std(0xe3e0d6, 0.45, 0.15), 26, 2.4, -6));
   g.add(boxes(standMat, [[26, 0.15, -6, 6, 0.3, 3.4]], false));
   g.add(boxes(MAT.dark, [
     [24.6, 0.85, -6.7, 0.12, 1.2, 0.12], // legs
@@ -751,7 +751,7 @@ export function buildYard() {
   const drumGeo = new THREE.CylinderGeometry(0.29, 0.29, 0.88, 18);
   const drums = [];
   for (let i = 0; i < 6; i++) drums.push([2 + (i % 3) * 0.62, 0.44, -13.5 - Math.floor(i / 3) * 0.62]);
-  g.add(instances(drumGeo, std(0x2f5f9e, 0.45, 0.2), drums, true));
+  g.add(instances(drumGeo, std(0x6a7078, 0.45, 0.2), drums, true));
 
   // Light pole
   g.add(rods(MAT.steel, [

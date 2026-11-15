@@ -27,12 +27,14 @@ const MAX_ICON_SCALE = 26;     // largest enlargement of a tractor, at the overv
 const MAX_IMPLEMENT_SCALE = 9; // implements are enlarged less, so a wide boom does not cover a field
 const ICON_DISTANCE = 16;      // camera distance per 1x of enlargement (true size at the follow distance)
 const TRACTOR_GLB = "assets/tractor.glb";
-const DUST = false;
+const PLUME = true;   // tier 5: dust and mist behind a working tool
 // Used only until the server sends farm.implements: width in metres read from the id.
 const FALLBACK_WIDTH = { spray: 18, mow: 4, till: 6, plant: 6 };
 const TYPE_BY_PREFIX = { sprayer: "spray", mower: "mow", disc: "till", planter: "plant" };
-const STATUS_COLOR = { idle: "#9fb0a5", traveling: "#7fb2ff", servicing: "#f0ae4d", working: "#67c587",
-                       waiting: "#f0ae4d", broken: "#ef6d68" };
+// A tractor's colour is its identity and nothing else, so status is not colour-coded.
+// The one exception is the hazard red for a breakdown.
+const STATUS_COLOR = { broken: "#ef6d68" };
+const FUEL_BAR = (pct) => (pct < 25 ? "var(--danger)" : "#c3d1c8");
 
 // Richer models and terrain live in web/assets. If either file is missing or
 // breaks, the plain built-in versions below are used, so the page never fails.
@@ -365,6 +367,7 @@ function freeTree(root) {
   if (!root) return;
   root.traverse((o) => {
     if (o.isCSS2DObject) o.element.remove();
+    if (o.isSprite) o.material.dispose();
     if (!o.isMesh) return;
     o.geometry.dispose();
     if (o.isInstancedMesh) o.dispose();
@@ -479,11 +482,17 @@ function buildFarm(farm) {
   // Pull back only as far as needed for every field and the yard to sit clear of the panels.
   const points = farm.nodes.filter((n) => n.kind !== "junction").map((n) => P(n.x, n.y));
   const direction = overview.position.clone().sub(centre).normalize(), probe = camera.clone();
+  const panels = ["readout", "buttons", "fleet"].map((id) => $(id).getBoundingClientRect());
   for (let distance = span * 0.3; distance < span * 3; distance *= 1.05) {
     probe.position.copy(centre).addScaledVector(direction, distance);
     probe.lookAt(centre);
     probe.updateMatrixWorld();
-    const inView = points.every((p) => { const q = p.clone().project(probe); return Math.abs(q.x) < 0.84 && q.y > -0.66 && q.y < 0.46; });
+    const inView = points.every((p) => {
+      const q = p.clone().project(probe), x = (q.x + 1) / 2 * innerWidth, y = (1 - q.y) / 2 * innerHeight;
+      if (x < 60 || x > innerWidth - 60 || y < 150 || y > innerHeight - 40) return false;
+      // A name tag sits above each tractor and field, so leave room for it under a panel.
+      return !panels.some((r) => x > r.left - 30 && x < r.right + 30 && y > r.top - 30 && y < r.bottom + 80);
+    });
     if (inView) { overview.position.copy(probe.position); break; }
   }
   flyTo(overview.position, overview.target, 0);
@@ -785,6 +794,38 @@ function implementCatalog(state) {
 
 // ---------------------------------------------------------------- tractors
 
+// One soft round puff, shared by every dust and mist sprite.
+const PUFF = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d"), fade = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  fade.addColorStop(0, "rgba(255,255,255,1)");
+  fade.addColorStop(0.45, "rgba(255,255,255,0.45)");
+  fade.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = fade;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+KEEP_TEXTURES.add(PUFF);
+
+// Lay the plume out for the tool in use. Sizes in metres, in the tractor's own frame.
+function layoutPlume(view, kind, width) {
+  const key = `${kind}|${width}`;
+  if (view.plumeKey === key) return;
+  view.plumeKey = key;
+  view.plumeSprites.forEach((sprite, k) => {
+    if (kind === "mist") {
+      // A fine pale band just behind the boom, across its whole width.
+      sprite.userData = { x: -6.4 - (k % 2) * 1.2, y: 1.1, z: -width / 2 + (k + 0.5) * width / 9, size: Math.max(2.4, width / 6), opacity: 0.2 };
+      sprite.material.color.set(0xe9f2f7);
+    } else {
+      // Dust lifts and spreads as it trails away from the tool.
+      sprite.userData = { x: -4.6 - k * 2.1, y: 0.7 + k * 0.5, z: (k % 2 ? 1 : -1) * width * 0.24 * (1 - k / 11), size: 2.6 + k * 1.3, opacity: 0.36 * (1 - k / 9.5) };
+      sprite.material.color.set(0xd2bb94);
+    }
+  });
+}
+
 const tractorLayer = new THREE.Group();
 scene.add(tractorLayer);
 const tractors = {};   // id -> view
@@ -836,27 +877,17 @@ function makeTractor(t) {
     inner.add(lamp);
     view.hazards.push(lamp);
   }
-  view.headlights = [];
-  const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff2c4 });
-  for (const z of [-0.42, 0.42]) {
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.24, 0.3), lampMat);
-    lamp.position.set(2.3, 2.05, z);
-    lamp.visible = false;
-    inner.add(lamp);
-    view.headlights.push(lamp);
-  }
-  const beam = new THREE.Mesh(new THREE.ConeGeometry(2.6, 9, 14, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
-  beam.rotation.z = Math.PI / 2; beam.position.set(6.8, 1.6, 0); beam.visible = false;
-  inner.add(beam);
-  view.beam = beam;
-
   // A ring on the ground in the tractor's colour, and a red one when it is broken.
   view.ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.4, 40),
     new THREE.MeshBasicMaterial({ color: view.color, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide }));
   view.ring.rotation.x = -Math.PI / 2; view.ring.position.y = 0.05;
   Object.assign(view.ring.material, { polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -200 });
   inner.add(view.ring);
+  view.pulse = new THREE.Mesh(new THREE.RingGeometry(5.8, 7.0, 48),
+    new THREE.MeshBasicMaterial({ color: 0xff2a1f, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide,
+                                  polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -240 }));
+  view.pulse.rotation.x = -Math.PI / 2; view.pulse.position.y = 0.06; view.pulse.visible = false;
+  inner.add(view.pulse);
   view.warn = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 3),
     new THREE.MeshBasicMaterial({ color: 0xef3b30 }));
   view.warn.position.set(-0.85, 5.6, 0); view.warn.visible = false;
@@ -876,14 +907,17 @@ function makeTractor(t) {
   label.center.set(0.5, 1.2);
   inner.add(label);
 
-  // Dust (tilling) and mist (spraying): a few soft puffs recycled behind the implement.
-  const puffs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6),
-    new THREE.MeshBasicMaterial({ color: 0xd8c3a0, transparent: true, opacity: 0.2, depthWrite: false }), 14);
-  puffs.frustumCulled = false; puffs.visible = false;
-  tractorLayer.add(puffs);
-  view.puffs = puffs;
-  view.puffData = Array.from({ length: 14 }, () => ({ life: 0, p: new THREE.Vector3(), s: 0 }));
-  view.puffNext = 0;
+  // Dust behind a tool working dry soil, mist behind a sprayer: soft sprites trailing the implement.
+  view.plume = new THREE.Group();
+  view.plume.visible = false;
+  view.plumeSprites = [];
+  for (let k = 0; k < 9; k++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: PUFF, transparent: true, depthWrite: false, opacity: 0 }));
+    view.plume.add(sprite);
+    view.plumeSprites.push(sprite);
+  }
+  inner.add(view.plume);
+  view.plumeKey = "";
 
   tractorLayer.add(group);
   tractors[t.id] = view;
@@ -1054,7 +1088,7 @@ function rebuildRoutes(state, animate) {
     mesh.renderOrder = 2;
     if (animate) geo.setDrawRange(0, 0);
     routeLayer.add(mesh);
-    routes.push({ mesh, total, drawn: animate ? 0 : 1, fading: 0 });
+    routes.push({ mesh, total, drawn: animate ? 0 : 1, fading: 0, tractor: t.id });
   }
 }
 
@@ -1149,17 +1183,20 @@ function applyState(next) {
     buildFarm(next.farm);
     for (const id of Object.keys(tractors)) {
       freeTree(tractors[id].group);
-      freeTree(tractors[id].puffs);
-      tractorLayer.remove(tractors[id].group, tractors[id].puffs);
+      tractorLayer.remove(tractors[id].group);
       delete tractors[id];
     }
     for (const r of routes) { routeLayer.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
     fleetKey = "";
     routes = []; routeKey = ""; routePlanNo = -1; lastPlanTractor = {};
+    incident = null;
+    for (const id of Object.keys(lastSeen)) delete lastSeen[id];
     for (const id of Object.keys(shown)) delete shown[id];
     followId = selectedId = null;
   }
   if (state && next.now + 1e-6 < state.now) {          // the day was reset
+    incident = null;
+    for (const id of Object.keys(lastSeen)) delete lastSeen[id];
     for (const id of Object.keys(shown)) delete shown[id];
     for (const f of Object.values(fields)) f.key = "";
     shownNow = null;
@@ -1184,12 +1221,92 @@ function applyState(next) {
   if (lineWidth > 0) updateRoutes(next);
 
   updateHud(next);
+  updateIncident(next);
+  drawIncident();
   $("clock").textContent = next.clock || "--:--";
   $("plan-no").textContent = next.foreman.plan_no ? `Plan ${next.foreman.plan_no}` : "";
   $("run-state").textContent = next.finished ? "Day complete" : next.running ? `Running ${next.clock_speed ?? next.speed}×` : "Paused";
   $("headline").textContent = (next.foreman.explanation || {}).headline || "No plan yet.";
   $("status").textContent = "";
   $("status").className = "";
+}
+
+// The breakdown banner. It appears by itself when a tractor fails and says, from the
+// state alone: what failed, what Foreman did about it, and the AI Recovery agent's
+// estimate once that arrives.
+const VERB = { till: "tilling", plant: "planting", mow: "mowing", spray: "spraying" };
+const lastSeen = {};        // tractor id -> what it was doing at the last reading
+let incident = null;
+
+function updateIncident(next) {
+  const jobById = Object.fromEntries(next.foreman.jobs.map((j) => [j.id, j]));
+  const story = next.foreman.explanation || {};
+  for (const t of next.foreman.tractors) {
+    const before = lastSeen[t.id];
+    if (t.status === "broken" && (!before || before.status !== "broken")) {
+      let what = `${t.name} broke down at ${next.clock}`;
+      if (before && before.job) what += ` while ${VERB[before.type] || "working"} ${before.field} (${before.pct}% done)`;
+      else if (before && before.status === "traveling") what += " on the road";
+      // On a page opened mid-breakdown the time of the failure is not known.
+      incident = { id: t.id, name: t.name, at: before ? next.now : -Infinity, what: before ? what + "." : `${t.name} is broken down.`,
+                   did: "Foreman is re-planning the rest of the day.", ai: "", back: null, hideAt: null };
+    }
+    const job = t.job ? jobById[t.job] : null;
+    lastSeen[t.id] = { status: t.status, job: t.job, type: job ? job.type : null, pct: job ? job.pct : 0,
+                       field: job && nodes[job.field] ? nodes[job.field].name || job.field : "" };
+  }
+  if (!incident) return;
+  const tractor = next.foreman.tractors.find((t) => t.id === incident.id);
+  if (!tractor) { incident = null; return; }
+
+  // The server's own sentence for the failure, and what the re-plan changed.
+  const sentence = (story.headline || "").split(/(?<=\.)\s+/).find((part) => part.includes(incident.name) && part.includes("went down"));
+  if (sentence) {
+    incident.what = sentence;
+    incident.did = `Foreman re-planned${story.ms != null ? ` in ${story.ms} ms` : ""}: ${story.summary || ""}`.trim();
+  }
+
+  // The AI Recovery agent's newest call about this tractor since it failed.
+  const call = (next.foreman.reasoning || []).find((r) => r.agent === "AI Recovery agent" && r.at >= incident.at - 2
+                                                         && String(r.input || "").startsWith(incident.name));
+  if (call && call.status === "thinking") incident.ai = "is reading the fault report.";
+  else if (call && call.status === "done" && call.answer) {
+    incident.ai = `${call.answer.severity} fault, about ${call.answer.downtime_min} min. ${call.applied || ""}`.trim();
+  } else if (call) incident.ai = "gave no usable answer. The rule-based plan stands.";
+
+  if (tractor.status !== "broken" && !incident.hideAt) {
+    incident.back = `${incident.name} is back in service at ${next.clock}.`;
+    incident.hideAt = performance.now() + 20000;      // stays for 20 seconds, then clears
+  }
+  if (tractor.status === "broken") { incident.back = null; incident.hideAt = null; }
+}
+
+// The banner takes the space to the right of the readout; the tractor card moves below it.
+function placePanels() {
+  const banner = $("incident"), shownBanner = banner.style.display === "block";
+  banner.style.left = `${Math.round($("readout").getBoundingClientRect().right + 12)}px`;
+  $("card").style.top = shownBanner ? `${Math.round(banner.getBoundingClientRect().bottom + 12)}px` : "";
+}
+window.addEventListener("resize", placePanels);
+
+function drawIncident() {
+  const box = $("incident");
+  if (incident && incident.hideAt && performance.now() > incident.hideAt) incident = null;
+  const key = incident ? JSON.stringify([incident.what, incident.did, incident.ai, incident.back]) : "";
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.style.display = incident ? "block" : "none";
+  placePanels();
+  if (!incident) return;
+  $("incident-what").textContent = `⚠ ${incident.back || incident.what}`;
+  $("incident-did").textContent = incident.did;
+  const ai = $("incident-ai");
+  ai.replaceChildren();
+  if (incident.ai) {
+    const who = document.createElement("b");
+    who.textContent = "AI Recovery agent ";
+    ai.append(who, incident.ai);
+  }
 }
 
 // Day summary and fleet list, straight from the state's totals and tractor rows.
@@ -1235,7 +1352,7 @@ function updateHud(next) {
     state.style.color = status === "broken" ? "var(--danger)" : "";
     const bar = document.createElement("span"); bar.className = "bar";
     const fill = document.createElement("span"); fill.style.width = `${clamp(fuel, 0, 100)}%`;
-    fill.style.background = fuel < 25 ? "var(--danger)" : fuel < 60 ? "var(--accent)" : "var(--good)";
+    fill.style.background = FUEL_BAR(fuel);
     bar.append(fill);
     row.append(dot, label, state, bar);
     return row;
@@ -1280,7 +1397,6 @@ function updateSun(dt) {
   hemi.intensity = 1.5 - 0.35 * high;
   scene.fog.color.setRGB(0.93 - 0.1 * high, 0.76 + 0.06 * high, 0.6 + 0.26 * high);   // haze matched to the horizon
   renderer.toneMappingExposure = 0.6 - 0.06 * high;
-  state.dawn = high < 0.5;
   state.daylight = high;
 }
 
@@ -1349,11 +1465,12 @@ function updateTractors(dt, iconScale, time) {
     for (const lamp of view.hazards) lamp.visible = broken && blink;
     view.warn.visible = broken;
     view.warn.rotation.y = time * 2;
-    view.ring.material.color.set(broken ? "#ef3b30" : view.color);
-    view.ring.material.opacity = broken ? (blink ? 0.95 : 0.35) : 0.75;
-    const lights = !!state.dawn && !broken;
-    for (const lamp of view.headlights) lamp.visible = lights;
-    view.beam.visible = lights && (t.status === "traveling" || working);
+    view.pulse.visible = broken;
+    if (broken) {
+      const phase = (time * 0.8) % 1;                      // a red ring that spreads out and fades, about once a second
+      view.pulse.scale.setScalar(1 + 1.7 * phase);
+      view.pulse.material.opacity = 0.95 * (1 - phase);
+    }
 
     const jobLabel = job && nodes[job.field] ? `${job.type} ${nodes[job.field].name || job.field}` : t.status;
     const text = `${broken ? "⚠ " : ""}${t.name}|${broken ? "broken down" : jobLabel}`;
@@ -1366,30 +1483,19 @@ function updateTractors(dt, iconScale, time) {
       view.tag.append(dot, document.createTextNode(`${broken ? "⚠ " : ""}${t.name}`), small);
     }
 
-    // Dust behind a disc, mist behind a sprayer, only while it is really working and moving.
-    const type = (view.spec || {}).type, moved = before.distanceTo(view.pos);
-    // Off: the clock runs at 60 times real speed or more, so a dust trail turns into a row of blobs.
-    const emit = DUST && working && (type === "till" || type === "spray") && moved > 1e-4;
-    view.puffs.visible = emit || view.puffData.some((p) => p.life > 0);
-    if (view.puffs.visible) {
-      view.puffs.material.color.set(type === "spray" ? 0xdfeaf2 : 0xd3b990);
-      view.puffTimer = (view.puffTimer || 0) + dt;
-      if (emit && view.puffTimer > 0.09) {
-        view.puffTimer = 0;
-        const p = view.puffData[view.puffNext++ % view.puffData.length];
-        const drawn = Math.min(iconScale, MAX_IMPLEMENT_SCALE);
-        const back = (type === "spray" ? 5.6 : 4.6) * M * drawn, half = ((view.spec || {}).width || 4) * M * drawn / 2;
-        p.p.set(view.pos.x - Math.cos(view.heading) * back + Math.sin(view.heading) * (Math.random() - 0.5) * 2 * half, 0.06 * drawn,
-                view.pos.z + Math.sin(view.heading) * back + Math.cos(view.heading) * (Math.random() - 0.5) * 2 * half);
-        p.life = 1; p.s = (type === "spray" ? 0.07 : 0.12) * drawn;
-      }
-      view.puffData.forEach((p, i) => {
-        p.life = Math.max(0, p.life - dt * 0.8);
-        dummy.position.copy(p.p); dummy.position.y += (1 - p.life) * 0.25 * Math.min(iconScale, MAX_IMPLEMENT_SCALE);
-        dummy.scale.setScalar(p.life > 0 ? p.s * (1.2 + (1 - p.life) * 2.5) * p.life ** 0.4 : 0.0001);
-        dummy.updateMatrix(); view.puffs.setMatrixAt(i, dummy.matrix);
+    // Dust behind a tool working dry soil, mist behind the sprayer, only while the day runs and it is working.
+    const tool = (view.spec || {}).type;
+    const kind = working && state.running && !broken ? (tool === "spray" ? "mist" : tool === "till" || tool === "plant" ? "dust" : null) : null;
+    view.plume.visible = PLUME && kind !== null;
+    if (view.plume.visible) {
+      layoutPlume(view, kind, (view.spec || {}).width || 6);
+      view.plume.scale.setScalar(Math.min(iconScale, MAX_IMPLEMENT_SCALE) / iconScale);
+      view.plumeSprites.forEach((sprite, k) => {
+        const u = sprite.userData, breathe = 1 + 0.14 * Math.sin(time * 4.2 + k * 1.9);
+        sprite.position.set(u.x, u.y * breathe, u.z + 0.25 * Math.sin(time * 3.1 + k));
+        sprite.scale.setScalar(u.size * breathe);
+        sprite.material.opacity = u.opacity * (0.85 + 0.15 * Math.sin(time * 5.3 + k * 2.3));
       });
-      view.puffs.instanceMatrix.needsUpdate = true;
     }
   }
 }
@@ -1401,7 +1507,8 @@ function updateFields(dt, realDt) {
     const target = job.pct_exact ?? job.pct;
     const now = shown[job.id];
     // Ease toward the reported percent so the tractor and the paint move together.
-    shown[job.id] = now === undefined || target < now ? target : now + (target - now) * ease(dt, 2.2);
+    // While the day runs the paint glides to each new reading; when it is paused it sits exactly on it.
+    shown[job.id] = now === undefined || target < now || !state.running ? target : now + (target - now) * ease(realDt, 6);
     if (Math.abs(target - shown[job.id]) < 0.02) shown[job.id] = target;
     (byField[job.field] = byField[job.field] || []).push(job);
   }
@@ -1450,10 +1557,46 @@ function updateCard() {
     : last ? `All work ${clockText(last.finish)}` : "Nothing planned";
   $("card-fuel").textContent = `${t.fuel_pct}%`;
   $("card-fuel-bar").style.width = `${clamp(t.fuel_pct, 0, 100)}%`;
-  $("card-fuel-bar").style.background = t.fuel_pct < 25 ? "var(--danger)" : t.fuel_pct < 60 ? "var(--accent)" : "var(--good)";
+  $("card-fuel-bar").style.background = FUEL_BAR(t.fuel_pct);
 }
 
-window.foremanView = { camera, controls, scene, overview, renderer, fps: 0 };
+// The share of a field that the drawn passes cover, worked back from the drawn geometry.
+function coveredShare(field, widthM, pct) {
+  const st = passState(field, widthM, pct), r = field.radius;
+  const full = (i) => {
+    const height = Math.min(st.w, field.side - i * st.w);
+    return field.round ? stripArea(r, -r + i * st.w, -r + i * st.w + height, r) : height * field.side;
+  };
+  let total = 0, done = 0;
+  const count = Math.ceil(field.side / st.w - 1e-9);
+  for (let i = 0; i < count; i++) { total += full(i); if (i < st.pass) done += full(i); }
+  if (field.round) {
+    const [west, eastEnd] = passSpan(field, st.pass, st.w), half = (eastEnd - west) / 2;
+    const reach = st.east ? st.to - west : eastEnd - st.from;
+    done += stripArea(r, -r + st.top, -r + st.top + st.passWidth, reach - half);
+  } else done += (st.to - st.from) * st.passWidth;
+  return 100 * done / total;
+}
+// What the page is drawing right now, for checks from the browser console.
+function inspect() {
+  if (!state) return null;
+  return {
+    tractors: Object.values(tractors).map((view) => ({
+      id: view.id, name: view.data.name, stateColor: view.data.color, drawnColor: view.color,
+      stateMounted: view.data.mounted, drawnImplement: view.mounted, drawnType: (view.spec || {}).type, drawnWidth: (view.spec || {}).width,
+      status: view.data.status, x: +(view.pos ? view.pos.x : 0).toFixed(2), z: +(view.pos ? view.pos.z : 0).toFixed(2),
+      screen: view.pos ? (() => { const q = view.pos.clone().setY(0.2).project(camera); return [Math.round((q.x + 1) / 2 * innerWidth), Math.round((1 - q.y) / 2 * innerHeight)]; })() : null,
+    })),
+    coverage: state.foreman.jobs.filter((j) => j.pct > 0 && fields[j.field]).map((j) => {
+      const width = (state.catalog[state.planImplement[j.id]] || {}).width || FALLBACK_WIDTH[j.type] || 6;
+      return { job: j.id, field: j.field, type: j.type, statePct: j.pct_exact ?? j.pct, shownPct: +(shown[j.id] ?? j.pct).toFixed(3),
+               paintedPct: +coveredShare(fields[j.field], width, shown[j.id] ?? j.pct).toFixed(3), width };
+    }),
+    routes: routes.filter((r) => !r.fading).map((r) => ({ tractor: r.tractor, color: "#" + r.mesh.material.color.getHexString() })),
+    labels: Object.values(tractors).map((view) => view.tag.textContent),
+  };
+}
+window.foremanView = { camera, controls, scene, overview, renderer, fps: 0, inspect };
 const fpsBox = new URLSearchParams(location.search).has("fps") ? document.createElement("div") : null;
 if (fpsBox) {
   fpsBox.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);padding:4px 10px;border-radius:6px;"
@@ -1461,14 +1604,27 @@ if (fpsBox) {
   document.body.append(fpsBox);
 }
 let fpsFrames = 0, fpsSince = performance.now();
+const fpsLog = [];
 function countFrame() {
   fpsFrames++;
   const now = performance.now();
   if (now - fpsSince < 1000) return;
   window.foremanView.fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
-  if (document.visibilityState === "visible" && state && state.running) {
-    // Kept so a reading taken while the page was in front can be read back later.
-    window.foremanView.fpsInFront = { fps: window.foremanView.fps, at: new Date().toISOString(), clock: state.clock };
+  if (document.visibilityState === "visible" && state) {
+    // Written only while this page is in front, so a reading can be read back from another tab.
+    fpsLog.push({ fps: window.foremanView.fps, running: !!state.running });
+    if (fpsLog.length > 120) fpsLog.shift();
+    const live = fpsLog.filter((sample) => sample.running).map((sample) => sample.fps);
+    try {
+      localStorage.setItem("foreman3dFps", JSON.stringify({
+        at: new Date().toISOString(), clock: state.clock, scenario: state.scenario, running: !!state.running,
+        speed: state.clock_speed ?? state.speed, fps: window.foremanView.fps, seconds: live.length,
+        min: live.length ? Math.min(...live) : null, avg: live.length ? Math.round(live.reduce((a, b) => a + b, 0) / live.length) : null,
+        last: live.slice(-20), size: [innerWidth, innerHeight], pixelRatio: renderer.getPixelRatio(),
+        calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+        working: state.foreman.tractors.filter((t) => t.status === "working").length,
+      }));
+    } catch (error) { /* storage can be unavailable; the on-screen figure still shows */ }
   }
   if (fpsBox) fpsBox.textContent = `${window.foremanView.fps} fps`;
   fpsFrames = 0;
@@ -1523,6 +1679,7 @@ function frame() {
   updateTractors(dt, iconScale, time);
   updateRouteAnimation(Math.min(elapsed, 3));   // real time, so a fade still ends if the tab was in the background
   updateCard();
+  drawIncident();
   updateScaleBar(distance);
   $("scale-note").textContent = iconScale < 1.05
     ? "Everything is at true size."
