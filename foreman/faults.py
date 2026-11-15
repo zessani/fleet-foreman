@@ -31,3 +31,12 @@ FAULTS: tuple[dict, ...] = (
 def fault_sample(index: int) -> dict:
     """The index-th sample, wrapping around. Deterministic so a replay gets the same faults."""
     return dict(FAULTS[index % len(FAULTS)])
+
+
+def out_all_day_report() -> str:
+    """The sample report for a fault that is not repaired today.
+
+    A scripted breakdown with no report keeps the tractor out for the rest of the day,
+    so this is the report that matches what the simulator does.
+    """
+    return next(fault["report"] for fault in FAULTS if fault["repair_after_min"] is None)

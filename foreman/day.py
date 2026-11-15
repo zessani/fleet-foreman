@@ -14,7 +14,7 @@ from pathlib import Path
 
 from foreman.ai_crew import AiCrew
 from foreman.ai_desk import AiDesk
-from foreman.faults import fault_sample
+from foreman.faults import fault_sample, out_all_day_report
 from foreman.roles import Orchestrator
 from foreman.baseline import plan_baseline
 from foreman.memory import Memory
@@ -189,6 +189,10 @@ class Day:
             # has to notice it from the status feed.
             for run in (self.foreman, self.baseline):
                 run.break_down(event["tractor"], bool(event.get("silent")))
+            if not event.get("report") and self.desk is not None and not event.get("silent"):
+                # A scripted breakdown with no report: the tractor stays out all day, so the
+                # AI Recovery agent reads the sample report that says so. Nothing else changes.
+                event = {**event, "report": out_all_day_report()}
             if event.get("report"):
                 self.faults[event["tractor"]] = {"report": event["report"], "at": self.now,
                                                  "true_downtime": event.get("repair_after_min")}
