@@ -207,6 +207,7 @@
   <label for="break-tractor">Tractor</label>
   <select id="break-tractor" aria-label="Tractor to break"></select>
   <button id="break-button" class="danger">Break this tractor</button>
+  <button id="repair-button">Repair broken tractor</button>
   <span id="control-error" class="error"></span>
   <span class="clock" id="clock">--:--</span>
   <span class="run-state" id="run-state">Paused</span>
@@ -276,6 +277,8 @@
     </details>
   </aside>
 </main>
+<div id="decisions-panel" style="margin: 0 20px 16px;"></div>
+<div id="numbers-panel" style="margin: 0 20px 16px;"></div>
 
 <script>
   const canvas = document.getElementById("farm-map");
@@ -727,6 +730,8 @@
         body: JSON.stringify({ action, speed: Number(document.getElementById("speed").value) }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (result.ok === false) throw new Error(result.error || "the request was rejected");
       await poll();
     } catch (error) {
       text("control-error", `Control failed: ${error.message}`);
@@ -755,6 +760,25 @@
       text("control-error", `Breakdown failed: ${error.message}`);
     } finally {
       renderBreakdownControl();
+    }
+  }
+
+  async function repairTractors() {
+    const broken = (state?.foreman?.tractors || []).filter(tractor => tractor.status === "broken");
+    text("control-error", broken.length ? "" : "No tractor is broken.");
+    try {
+      for (const tractor of broken) {
+        const response = await fetch("/api/event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "repair", tractor: tractor.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      }
+      await poll();
+    } catch (error) {
+      text("control-error", `Repair failed: ${error.message}`);
     }
   }
 
@@ -801,6 +825,7 @@
     button.addEventListener("click", () => control(button.dataset.action));
   });
   document.getElementById("break-button").addEventListener("click", breakTractor);
+  document.getElementById("repair-button").addEventListener("click", repairTractors);
   document.getElementById("road-button").addEventListener("click", changeRoad);
   document.getElementById("road-select").addEventListener("change", renderEventControls);
   document.getElementById("priority-button").addEventListener("click", changePriority);
@@ -818,5 +843,7 @@
   setInterval(poll, 500);
   requestAnimationFrame(animate);
 </script>
+<script src="panels/decisions.js"></script>
+<script src="panels/numbers.js"></script>
 </body>
 </html>

@@ -94,6 +94,8 @@ class Run:
             "id": job_id, "type": job.type, "field": job.field, "priority": job.priority,
             "deadline": job.deadline,
             "pct": round(100.0 * (1.0 - state.remaining_ha / job.area_ha)) if job.area_ha else 100,
+            # Unrounded, so a map can move a tractor smoothly through its field.
+            "pct_exact": round(100.0 * (1.0 - state.remaining_ha / job.area_ha), 3) if job.area_ha else 100.0,
             "status": "held" if held_reason and state.status != "done" else state.status,
             "tractor": state.tractor or (planned["tractor"] if planned else None),
         }

@@ -164,8 +164,8 @@ reported fault, or a tractor that says it is working but makes no progress for
 - The model never assigns jobs. The planner does.
 - A re-plan never waits on the model. The rule-based plan is dispatched first,
   and the model's answer is applied when it arrives.
-- Each call has a 10 second limit. The client enforces it, and `AiCrew`
-  abandons a call at 12 seconds as a backstop.
+- Each call has a 15 second limit. The client enforces it, and `AiCrew`
+  abandons a call 2 seconds later as a backstop.
 - Any error, timeout or bad JSON falls back to the rules and is logged.
 - The AI Safety agent is asked only after the safety gate has passed a plan,
   once per plan. It can only add caution. Any plan it triggers must pass the
@@ -568,6 +568,14 @@ hidden factors off, idle weight 0.7. Zero rule violations on every day.
 - On 1 day (the ten-job test farm, Cedar breaks at minute 180) the baseline
   finishes 9 jobs and Foreman finishes 8.
 - On 5 days the baseline wastes fewer minutes (travel + idle + service).
+- The AI Safety agent does not fix the two Cedar days. Tested with the real
+  model on both (Cedar breaks at minute 45 or 70): it raises the concern by
+  itself on the first plan ("Cedar holds J2 and J3, and J3 depends on J2"),
+  and the one re-plan it asks for passes the safety gate. With that caution
+  all five jobs get finished instead of four, and the day ends at 14:05, not
+  at the end of the working day. But the on-time count stays at 3 of 5
+  against the baseline's 4: the re-plan gives Cedar both spray jobs, so when
+  Cedar breaks those are the ones that finish late.
 - Over all 196 days: Foreman 1,946 jobs on time and 63,637 wasted minutes;
   baseline 1,343 and 104,355.
 | Re-plan time | Milliseconds from event to dispatched plan |

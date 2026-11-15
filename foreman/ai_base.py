@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
-AI_TIMEOUT_S = 10.0  # hard limit on every AI call; after it the rules carry on
+AI_TIMEOUT_S = 15.0  # hard limit on every AI call; after it the rules carry on
 
 TOOLS_CALLED = "tools called"  # the model asked for the data through tools
 DATA_READ = "data read"        # the same data was passed in the prompt instead

@@ -104,7 +104,7 @@ feeds the learning loop. Events seen in the same status reading share one re-pla
 - Review a plan the safety gate has not passed. The AI Safety agent is asked
   once per plan, and a plan it triggers must pass the gate again.
 - Act on a stale answer. An answer for a plan that was replaced is discarded.
-- Take longer than 10 seconds. Any error, timeout or bad JSON falls back to the
+- Take longer than 15 seconds. Any error, timeout or bad JSON falls back to the
   rules and is logged.
 - Change anything through their tools. The tools are read-only snapshots.
 
