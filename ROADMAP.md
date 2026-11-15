@@ -63,7 +63,7 @@ Done when: we can break any tractor and the plan repairs with no human.
 - [ ] Breakdown test cases
 
 ### Vishwa
-- [ ] Random farm maker
+- [x] Random farm maker
 - [ ] Export event log and comparison numbers
 - [ ] Tests for the basic rules
 - [ ] Deck: problem, product, architecture
