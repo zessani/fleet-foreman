@@ -42,7 +42,7 @@ is broken, and we beat "first come, first served".
 ### Vishwa
 - [x] Sample farm file: 3 tractors, 8 fields, 10 jobs
 - [x] Farm file checker
-- [ ] Numbers panel
+- [x] Numbers panel
 - [ ] Deck started
 
 **Merge 1 at 2:00**
