@@ -217,7 +217,7 @@ class AiDesk:
                          for stop in route],
             }
         history = {}
-        for tractor_id, tractor in run.sim.tractors.items():
+        for tractor_id, tractor in run.tractors.items():
             history[tractor_id] = {
                 "name": farm.tractors[tractor_id].name,
                 "jobs_done_today": sum(1 for state in run.sim.jobs.values()

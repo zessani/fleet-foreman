@@ -21,15 +21,17 @@ class RecoveryMonitor(Role):
         return events
 
     def _report_failure(self, event: dict) -> None:
-        tractor = self.run.sim.tractors[event["tractor"]]
+        tractor = self.run.tractors[event["tractor"]]
         name = self.tractor_name(event["tractor"])
         if event["cause"] == "stall":
             # It still claims to be working. Take it out of service so it gets no more work.
-            tractor.break_down()
+            self.run.break_down(event["tractor"])
             seen = f"{name} reported working but made no progress for {STALL_MIN:.0f} min"
         else:
             seen = f"{name} reported a fault"
-        delay = self.run.now - tractor.fault_at if tractor.fault_at is not None else 0.0
+        # Live adapters use wall time for the raw fault marker; status polling still
+        # reports a safe non-negative detection delay on the simulated farm clock.
+        delay = max(0.0, self.run.now - tractor.fault_at) if tractor.fault_at is not None and not self.run.live else 0.0
         event["detection_min"] = round(delay, 2)
         self.say("failure_detected", f"{seen}. Detected {delay:.1f} min after it happened.",
                  tractor=event["tractor"], cause=event["cause"], detection_min=round(delay, 2))

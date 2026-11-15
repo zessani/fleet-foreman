@@ -2,12 +2,44 @@
 
 Owner: Ahmed
 
-This bridge mirrors one tractor from Foreman's live state into AgOpenWeb's
-built-in simulator. It uses AgOpenWeb's real `/ws` command protocol, obtains
-control authority, sends the required deadman heartbeat, updates GPS position,
-and stops the AgOpenWeb tractor when Foreman reports a breakdown.
+The project now has two AgOpenWeb modes:
 
-## Run
+- **Live execution (recommended):** Foreman creates an `AgOpenWebTractorAdapter`
+  for every tractor. AgOpenWeb owns GPS movement and worked-area progress.
+- **Legacy mirror:** this module's CLI copies one deterministic simulator
+  tractor into AgOpenWeb. It remains only as a protocol diagnostic.
+
+Live execution uses AgOpenWeb's real `/ws` command protocol, obtains control
+authority, keeps the deadman heartbeat alive, dispatches fields/jobs and
+recorded paths, and reads GPS, guidance, section and coverage telemetry.
+
+## Live execution
+
+Run one isolated AgOpenWeb host per tractor. Each must have the matching farm
+fields and recorded paths named `Foreman-<job id>` (for example `Foreman-J1`).
+Then start Foreman with one URL for every tractor:
+
+```sh
+FOREMAN_AGOPENWEB_URLS='T1=ws://tractor-1.local:5174/ws;T2=ws://tractor-2.local:5174/ws;T3=ws://tractor-3.local:5174/ws' \
+FOREMAN_AGOPENWEB_ORIGIN='33.4484,-112.0740' \
+python -m foreman.server
+```
+
+Foreman refuses partial or duplicated live configuration: every farm tractor
+needs its own URL on a different host. AgOpenWeb itself enforces one running
+instance per computer and binds port 5174, so fleet mode uses separate
+computers/VMs/containers, not ports 5174/5175/5176 on one Mac. With no
+`FOREMAN_AGOPENWEB_URLS`, the server uses deterministic simulation.
+
+In live mode:
+
+- assignments become `field.startJob`, `recpath.selectFile`, and `recpath.play`;
+- AgOpenWeb controls simulator speed, steering/autosteer, and sections;
+- `/api/state` positions and job percentages come from AgOpenWeb telemetry;
+- completion is based on AgOpenWeb `WorkedAreaSqM`, not a Foreman work timer;
+- `SimTractor.step()` is never called for the Foreman run.
+
+## Legacy mirror diagnostic
 
 1. Start AgOpenWeb and turn on its **SIM** panel. It serves its UI at
    `http://localhost:5174`.

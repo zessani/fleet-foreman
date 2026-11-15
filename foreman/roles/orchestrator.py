@@ -116,7 +116,7 @@ class Orchestrator(Role):
         """No plan passed Safety. Nothing unverified is sent; idle the tractors that can stop."""
         run = self.run
         stopped = []
-        for tractor_id, tractor in sorted(run.sim.tractors.items()):
+        for tractor_id, tractor in sorted(run.tractors.items()):
             if tractor.status()["state"] not in ("working", "broken"):
                 tractor.stop()
                 stopped.append(self.tractor_name(tractor_id))

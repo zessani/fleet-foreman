@@ -23,7 +23,10 @@ This is the Phase 0 skeleton. The server returns fake data from `GET /api/state`
 
 ## Simulation
 
-We use our own simulator. One tractor is planned to be mirrored in AgOpenWeb (see `bridge/`). This section will be updated before hand-in.
+The normal zero-setup demo uses the deterministic simulator. Live execution can
+instead use one AgOpenWeb host per tractor; in that mode AgOpenWeb GPS and
+worked-area telemetry drive the fleet dashboard and job completion. See
+`bridge/README.md` for the required URLs and field/path naming.
 
 ## Folders and owners
 

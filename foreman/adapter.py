@@ -1,7 +1,8 @@
 """The tractor interface (CLAUDE.md section 8b).
 
-Every tractor sits behind these three calls. The simulator implements it now.
-An AgOpenGPS tractor or a real ATC tractor can implement it later.
+Every tractor sits behind these three calls. The live server can use one
+AgOpenWeb adapter per tractor; the deterministic simulator implements the same
+contract for baseline comparisons and fast proof runs.
 """
 
 from typing import Protocol

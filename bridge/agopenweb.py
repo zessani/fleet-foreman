@@ -52,6 +52,17 @@ class AgOpenWebTelemetry:
     easting: float | None = None
     northing: float | None = None
     heading: float | None = None
+    worked_area_sqm: float = 0.0
+    job_name: str = ""
+    active_field: str = ""
+    guidance_active: bool = False
+    autosteer_engaged: bool = False
+    sections_active: bool = False
+    recorded_path_playing: bool = False
+    control_held: bool = False
+    client_id: str = ""
+    control_holder_id: str = ""
+    control_holder_name: str = ""
 
 
 class _Reader:
@@ -75,6 +86,11 @@ class _Reader:
         self.offset += length
         return value.decode("utf-8", errors="replace")
 
+    def skip(self, size: int) -> None:
+        if size < 0 or self.offset + size > len(self.data):
+            raise AgOpenWebError("short AgOpenWeb binary frame")
+        self.offset += size
+
 
 def decode_telemetry(frame: bytes, current: AgOpenWebTelemetry | None = None) -> AgOpenWebTelemetry:
     """Decode the pose/status prefix published by AgOpenWeb's WireCodec."""
@@ -89,6 +105,24 @@ def decode_telemetry(frame: bytes, current: AgOpenWebTelemetry | None = None) ->
         telemetry.northing = northing
         telemetry.heading = heading
         telemetry.speed_kph = speed
+        # Older hosts/tests published only this pose prefix.
+        if reader.offset == len(reader.data):
+            return telemetry
+        reader.unpack("<B")  # GPS fix
+        (section_count,) = reader.unpack("<i")
+        if section_count < 0 or section_count > 256:
+            raise AgOpenWebError("invalid AgOpenWeb section count")
+        sections = reader.data[reader.offset:reader.offset + section_count]
+        reader.skip(section_count)
+        telemetry.sections_active = any(value != 0 for value in sections)
+        reader.unpack("<f")  # cross-track error
+        (guidance,) = reader.unpack("<B")
+        telemetry.guidance_active = bool(guidance)
+        reader.string()  # line label
+        reader.string()  # active track name
+        reader.unpack("<ddfB")  # tool pose and ready
+        (autosteer,) = reader.unpack("<B")
+        telemetry.autosteer_engaged = bool(autosteer)
     elif kind == 5:  # WireCodec.Status
         reader.unpack("<i")
         reader.string()
@@ -98,8 +132,8 @@ def decode_telemetry(frame: bytes, current: AgOpenWebTelemetry | None = None) ->
         reader.string()
         reader.string()
         reader.unpack("<BBBB")
-        reader.string()
-        reader.unpack("<d")
+        telemetry.job_name = reader.string()
+        (telemetry.worked_area_sqm,) = reader.unpack("<d")
         latitude, longitude = reader.unpack("<dd")
         reader.unpack("<ff")
         enabled, speed, steer, _ = reader.unpack("<BffB")
@@ -108,6 +142,36 @@ def decode_telemetry(frame: bytes, current: AgOpenWebTelemetry | None = None) ->
         telemetry.sim_enabled = bool(enabled)
         telemetry.speed_kph = speed
         telemetry.steer_angle = steer
+    elif kind == 6:  # WireCodec.ControlState
+        (held,) = reader.unpack("<B")
+        telemetry.control_holder_id = reader.string()
+        telemetry.control_holder_name = reader.string()
+        telemetry.control_held = bool(held) and telemetry.control_holder_id == telemetry.client_id
+    elif kind == 7:  # WireCodec.Hello
+        telemetry.client_id = reader.string()
+    elif kind == 12:  # WireCodec.FieldOps
+        (fields,) = reader.unpack("<i")
+        for _ in range(fields):
+            reader.string()
+            reader.unpack("<Bdd")
+        (jobs,) = reader.unpack("<i")
+        for _ in range(jobs):
+            reader.string(); reader.string(); reader.string()
+            reader.unpack("<i")
+            reader.string(); reader.string()
+        (suggestions,) = reader.unpack("<i")
+        for _ in range(suggestions): reader.string()
+        (iso_files,) = reader.unpack("<i")
+        for _ in range(iso_files): reader.string()
+        (kml_files,) = reader.unpack("<i")
+        for _ in range(kml_files): reader.string()
+        telemetry.active_field = reader.string()
+    elif kind == 16:  # WireCodec.RecordedPath
+        (files,) = reader.unpack("<i")
+        for _ in range(files): reader.string()
+        reader.unpack("<B")  # recording
+        (playing,) = reader.unpack("<B")
+        telemetry.recorded_path_playing = bool(playing)
     return telemetry
 
 
