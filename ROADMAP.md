@@ -19,7 +19,7 @@ Goal: a starter repo that runs, so everyone can build on it.
 
 ### Ahmed
 - [ ] AgOpenWeb installed and opens on a Mac
-- [ ] Routing interface (section 8d) agreed
+- [x] Routing interface (section 8d) agreed
 
 ### Vishwa
 - [ ] Repo cloned and server runs
@@ -36,8 +36,8 @@ is broken, and we beat "first come, first served".
 - [x] "First come, first served" baseline
 
 ### Ahmed
-- [ ] Shortest routes and travel times
-- [ ] Farm map with tractors moving and field progress
+- [x] Shortest routes and travel times
+- [x] Farm map with tractors moving and field progress
 
 ### Vishwa
 - [ ] Sample farm file: 3 tractors, 8 fields, 10 jobs
