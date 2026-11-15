@@ -1101,7 +1101,7 @@ function updateCard() {
   $("card-fuel-bar").style.background = t.fuel_pct < 25 ? "var(--danger)" : t.fuel_pct < 60 ? "var(--accent)" : "var(--good)";
 }
 
-window.foremanView = { camera, controls, scene, overview };   // for inspection from the browser console
+window.foremanView = { camera, controls, scene, overview, renderer };   // for inspection from the browser console
 
 const timer = new THREE.Clock();
 function frame() {
