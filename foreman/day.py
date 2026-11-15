@@ -85,9 +85,13 @@ class Day:
             return f"type must be one of {', '.join(EVENT_TYPES)}"
         if kind in ("breakdown", "repair") and event.get("tractor") not in self.farm.tractors:
             return "unknown tractor"
-        if kind in ("block_road", "open_road") and not (
-                event.get("a") in self.farm.nodes and event.get("b") in self.farm.nodes):
-            return "a and b must be node ids"
+        if kind in ("block_road", "open_road"):
+            a, b = event.get("a"), event.get("b")
+            if not (a in self.farm.nodes and b in self.farm.nodes) or a == b:
+                return "a and b must be two node ids"
+            roads = self.farm.raw.get("roads")
+            if roads is not None and frozenset((a, b)) not in {frozenset(road) for road in roads}:
+                return f"there is no road between {a} and {b}"
         if kind == "set_priority" and (event.get("job") not in self.farm.jobs
                                        or event.get("priority") not in (1, 2, 3, 4, 5)):
             return "needs a known job and a priority from 1 to 5"

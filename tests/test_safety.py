@@ -119,7 +119,8 @@ def test_rule_5_before_release(farm, road_map, world, plan):
 
 
 def test_rule_6_closed_road(farm, road_map, world, plan):
-    report = run(farm, road_map, world, plan, blocked={frozenset(("YARD", "F3"))})
+    used = next(stop.path for stop in plan.stops() if len(stop.path) > 1)
+    report = run(farm, road_map, world, plan, blocked={frozenset(used[:2])})
     assert not report.checks[5].passed
     assert not report.passed
     assert failed_ids(report) == [6]

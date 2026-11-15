@@ -4,9 +4,9 @@ Hand-in: 5:00 PM. Code freeze: 4:00 PM.
 Full context and formats are in CLAUDE.md.
 
 ## Status
-- Current phase: 0
-- Last merge: none yet
-- Blockers: none
+- Current phase: 2
+- Last merge: Merge 1 at 2:00 PM (zayyan, ahmed, vishva)
+- Blockers: dashboard speed options 10x and 30x are rejected by the server (it takes 1, 4, 16, 60)
 
 Only tick boxes in your own section. Zayyan updates Status at each merge.
 

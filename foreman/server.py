@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from foreman.engine import EVENT_LOG_PATH, SCENARIO_DIR, Engine
+from foreman.engine import EVENT_LOG_PATH, Engine, find_scenario
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 HOST = "127.0.0.1"
@@ -74,13 +74,13 @@ def post_control(body: dict[str, Any]) -> dict:
 
 @app.post("/api/scenario")
 def post_scenario(body: dict[str, Any]) -> dict:
-    """{name}: load scenarios/<name>.json and reset the day."""
+    """{name}: load <name>.json from scenarios/ or scenarios/farms/ and reset the day."""
     name = str(body.get("name", ""))
     # Names only, so a request cannot reach files outside scenarios/.
     if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
         return {"ok": False, "error": "name must be letters, digits, - or _"}
-    path = SCENARIO_DIR / f"{name}.json"
-    if not path.exists():
+    path = find_scenario(name)
+    if path is None:
         return {"ok": False, "error": f"no scenario named {name}"}
     engine.load(path)
     return {"ok": True, "scenario": name}

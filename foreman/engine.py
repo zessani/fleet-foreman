@@ -21,10 +21,18 @@ DEFAULT_SPEED = 16
 LOG_LINES_IN_STATE = 200
 
 
+def find_scenario(name: str) -> Path | None:
+    """A farm file by name, from scenarios/ or scenarios/farms/."""
+    for folder in (SCENARIO_DIR / "farms", SCENARIO_DIR):
+        path = folder / f"{name}.json"
+        if path.exists():
+            return path
+    return None
+
+
 def default_scenario() -> Path:
-    """Vishwa's sample farm once it exists, the example farm until then."""
-    sample = SCENARIO_DIR / "sample_farm.json"
-    return sample if sample.exists() else SCENARIO_DIR / "example_farm.json"
+    """The sample farm if it is there, the example farm otherwise."""
+    return find_scenario("sample_farm") or SCENARIO_DIR / "example_farm.json"
 
 
 class Engine:
