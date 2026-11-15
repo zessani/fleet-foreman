@@ -89,6 +89,7 @@ class Plan:
     held: dict[str, str] = field(default_factory=dict)   # job id -> why it is not planned
     cost: float = 0.0
     ms: float = 0.0                                      # time taken to build the plan
+    resilience: dict = field(default_factory=dict)       # bounded tie-breaker audit data
 
     def stops(self) -> list[Stop]:
         every = [stop for route in self.routes.values() for stop in route]

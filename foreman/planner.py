@@ -19,6 +19,7 @@ from typing import Callable
 from foreman.evaluator import W_UNPLANNED, Evaluator, Order, SpeedFactor
 from foreman.model import Farm
 from foreman.nav import RoadMap
+from foreman.resilience import improve_within_tolerance
 from foreman.state import Plan, TractorState, WorldState
 
 MAX_SEARCH_PASSES = 50  # a stop so a re-plan always returns quickly
@@ -42,7 +43,7 @@ Score = Callable[[Order], "float | None"]
 def plan(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None = None,
          speed_factor: SpeedFactor | None = None, local_search: bool = True,
          change_cost: float = CHANGE_STRICT, hold: dict[str, str] | None = None,
-         spread_chain: bool = False) -> Plan:
+         spread_chain: bool = False, resilience: bool = True) -> Plan:
     """Build a plan for every unfinished job from the current state.
 
     previous is the plan being replaced. The new plan starts from it and pays
@@ -82,6 +83,11 @@ def plan(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None
     if local_search:
         _improve(evaluator, score, order, locked)
 
+    resilience_data = {}
+    if resilience and local_search and len(evaluator.tractor_ids) > 1:
+        resilience_data = improve_within_tolerance(
+            farm, road_map, world, evaluator, score, order, locked).to_dict()
+
     schedule = evaluator.schedule(order)
     if schedule is None:
         raise RuntimeError("planner built routes the evaluator rejects")
@@ -92,6 +98,7 @@ def plan(farm: Farm, road_map: RoadMap, world: WorldState, previous: Plan | None
         held=held,
         cost=schedule.cost + unplanned_cost,
         ms=(time.perf_counter() - started) * 1000.0,
+        resilience=resilience_data,
     )
 
 
@@ -334,7 +341,7 @@ def plan_with_return(farm: Farm, road_map: RoadMap, world: WorldState, previous:
     if schedule is None:
         return move
     return Plan(created_at=world.now, routes=schedule.routes, held=held, cost=wait.cost,
-                ms=move.ms + wait.ms)
+                ms=move.ms + wait.ms, resilience=wait.resilience)
 
 
 def _own_work_back(move: Plan, returning: dict[str, float], had: dict[str, list[str]]):

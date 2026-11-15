@@ -55,6 +55,10 @@ class Tractor:
     burn_km: float
     burn_work: float
     node: str
+    # Transparent reliability assumptions for risk-aware planning.  They are
+    # scenario inputs, not claims learned from telemetry.
+    breakdown_risk_per_hour: float = 0.02
+    typical_repair_min: float = 45.0
 
 
 @dataclass(frozen=True)
@@ -104,7 +108,9 @@ def farm_from_dict(raw: dict) -> Farm:
         t["id"]: Tractor(t["id"], t.get("name", t["id"]), float(t["hp"]), tuple(t["implements"]),
                          t["mounted"], float(t["speed_kmh"]), float(t["fuel_capacity"]),
                          float(t.get("fuel", t["fuel_capacity"])), float(t["burn_km"]),
-                         float(t["burn_work"]), t.get("node", depots[0]))
+                         float(t["burn_work"]), t.get("node", depots[0]),
+                         float(t.get("breakdown_risk_per_hour", 0.02)),
+                         float(t.get("typical_repair_min", 45.0)))
         for t in raw["tractors"]
     }
     horizon = float(raw.get("horizon_min", 660))

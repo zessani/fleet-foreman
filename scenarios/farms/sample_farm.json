@@ -36,15 +36,18 @@
     {"id": "T1", "name": "Atlas", "hp": 200,
      "implements": ["disc_6", "planter_8", "mower_6"], "mounted": "disc_6",
      "speed_kmh": 28, "fuel_capacity": 320, "fuel": 320,
-     "burn_km": 0.6, "burn_work": 0.45, "node": "YARD"},
+     "burn_km": 0.6, "burn_work": 0.45, "node": "YARD",
+     "breakdown_risk_per_hour": 0.015, "typical_repair_min": 45},
     {"id": "T2", "name": "Bolt", "hp": 130,
      "implements": ["sprayer_24", "mower_6"], "mounted": "sprayer_24",
      "speed_kmh": 32, "fuel_capacity": 220, "fuel": 220,
-     "burn_km": 0.5, "burn_work": 0.35, "node": "YARD"},
+     "burn_km": 0.5, "burn_work": 0.35, "node": "YARD",
+     "breakdown_risk_per_hour": 0.01, "typical_repair_min": 30},
     {"id": "T3", "name": "Cedar", "hp": 170,
      "implements": ["disc_6", "planter_8", "mower_6"], "mounted": "planter_8",
      "speed_kmh": 26, "fuel_capacity": 280, "fuel": 280,
-     "burn_km": 0.55, "burn_work": 0.4, "node": "YARD"}
+     "burn_km": 0.55, "burn_work": 0.4, "node": "YARD",
+     "breakdown_risk_per_hour": 0.04, "typical_repair_min": 60}
   ],
   "jobs": [
     {"id": "J1", "type": "spray", "field": "F1", "priority": 5,

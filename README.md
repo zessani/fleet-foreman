@@ -6,6 +6,15 @@ Foreman is a coordination layer, a rule-based core with two AI agents, that assi
 
 A farm manager today decides by phone and whiteboard which tractor does which job, and redoes the plan by hand when a machine breaks. Foreman does that job with no human in the loop. You give it a farm (fields, roads, tractors, implements) and a list of jobs with priorities and deadlines. A rule-based planner, route finder, safety gate and recovery monitor pick the right implement for each job, decide which tractor does what and in what order, route the tractors between fields so no two share a field, check every plan against fixed safety rules, and send it to the tractors. When a tractor breaks down, they notice it, keep every bit of finished work, give only the unfinished part to other tractors, and explain the new plan in plain English. We plan the work **between** fields; AgOpenGPS already plans the passes **inside** a field.
 
+Foreman also prevents fragile assignments before a failure occurs. It first
+finds the cheapest normal operating plan, then considers relocation and swap
+alternatives within 5% of that cost. A resilience estimate uses each tractor's
+configured failure rate, repair duration, compatible backups, recovery travel
+and deadline slack. An alternative is selected only when it reduces estimated
+disruption damage by at least 5%, and resilience has only 10% weight inside
+the shortlist. During a real breakdown, normal recovery and assignment
+stability take precedence.
+
 ![Foreman architecture](docs/architecture.png)
 
 ## Run it
