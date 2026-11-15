@@ -16,26 +16,77 @@ function std(color, roughness, metalness, extra = {}) {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
 }
 
+// Optional PBR surface sets, see applySurfaces. Which maps each material kind takes:
+// color = colour map (replaces any built-in one), normal = normalScale, rough = roughness map.
+const KIND = {
+  tyre: { src: "rubber", normal: 0.3, rough: true },
+  paint: { src: "paintedMetal", normal: 0.15, rough: true },
+  sheet: { src: "sheetMetal", color: true, normal: 1, rough: true },
+  concrete: { src: "concrete", color: true, normal: 1, rough: true },
+  steel: { src: "galvanised", rough: true },
+};
+let surfaces = null;
+const surfaced = [];
+
+function refresh(e) {
+  const k = KIND[e.kind];
+  const s = (surfaces && surfaces[k.src]) || {};
+  e.clones.forEach((t) => t.dispose());
+  e.clones = [];
+  // Own clone per use so each part gets its own repeat
+  const use = (t) => {
+    if (!t) return null;
+    const c = t.clone();
+    c.repeat.set(e.repeat[0], e.repeat[1]);
+    c.needsUpdate = true;
+    e.clones.push(c);
+    return c;
+  };
+  const m = e.mat;
+  if (k.color) m.map = use(s.map) || e.base;
+  if (k.normal) {
+    m.normalMap = use(s.normalMap);
+    m.normalScale.setScalar(k.normal);
+  }
+  if (k.rough) m.roughnessMap = use(s.roughnessMap);
+  m.needsUpdate = true;
+}
+
+// Registers a material for surface maps; repeat is in UV units per tile (about 2 m).
+function surf(mat, kind, repeat = [1, 1]) {
+  const e = { mat, kind, repeat, base: mat.map || null, clones: [] };
+  surfaced.push(e);
+  if (surfaces) refresh(e);
+  return mat;
+}
+
+// surfaces: {paintedMetal, rubber, sheetMetal, concrete, galvanised} of {map, normalMap, roughnessMap}.
+// Safe before or after objects are built, and to call again.
+export function applySurfaces(s) {
+  surfaces = s || {};
+  surfaced.forEach(refresh);
+}
+
 // Low metalness everywhere: there is no environment map, so metal would look black.
 const MAT = {
-  tyre: std(0x1d1d1d, 0.92, 0),
-  dark: std(0x2b2d31, 0.55, 0.3),
-  steel: std(0xaab0b6, 0.38, 0.5),
+  tyre: surf(std(0x1d1d1d, 0.92, 0), "tyre", [3, 1]),
+  dark: surf(std(0x2b2d31, 0.55, 0.3), "steel"),
+  steel: surf(std(0xaab0b6, 0.38, 0.5), "steel"),
   chrome: std(0xc6cacf, 0.25, 0.6),
-  blade: std(0xb9bec3, 0.3, 0.55, { side: THREE.DoubleSide }),
+  blade: surf(std(0xb9bec3, 0.3, 0.55, { side: THREE.DoubleSide }), "steel"),
   weight: std(0x45484d, 0.5, 0.35),
   glass: std(0x22313b, 0.08, 0.1, { transparent: true, opacity: 0.5 }),
 };
 
 // Implement colour schemes (generic, no real brand).
 const IMAT = {
-  sprayTank: std(0xe9e5da, 0.35, 0.05),
-  sprayFrame: std(0x2c3542, 0.5, 0.3),
-  sprayAccent: std(0xe2722b, 0.45, 0.1),
-  mowRed: std(0xb5312a, 0.42, 0.1, { side: THREE.DoubleSide }),
-  discBlue: std(0x1f4f8f, 0.42, 0.1),
-  plantFrame: std(0x2f4d6b, 0.45, 0.15),
-  plantHopper: std(0xe39a1c, 0.4, 0.05),
+  sprayTank: surf(std(0xe9e5da, 0.35, 0.05), "paint", [1.5, 1.5]),
+  sprayFrame: surf(std(0x2c3542, 0.5, 0.3), "steel"),
+  sprayAccent: surf(std(0xe2722b, 0.45, 0.1), "paint", [1.5, 1.5]),
+  mowRed: surf(std(0xb5312a, 0.42, 0.1, { side: THREE.DoubleSide }), "paint", [1.5, 1.5]),
+  discBlue: surf(std(0x1f4f8f, 0.42, 0.1), "paint", [1.5, 1.5]),
+  plantFrame: surf(std(0x2f4d6b, 0.45, 0.15), "paint", [1.5, 1.5]),
+  plantHopper: surf(std(0xe39a1c, 0.4, 0.05), "paint", [1.5, 1.5]),
 };
 
 // One painted material per body colour, shared between tractors.
@@ -43,7 +94,7 @@ const paintCache = new Map();
 function paint(color) {
   const key = String(color);
   if (!paintCache.has(key)) {
-    paintCache.set(key, std(new THREE.Color(color), 0.4, 0.1, { side: THREE.DoubleSide }));
+    paintCache.set(key, surf(std(new THREE.Color(color), 0.4, 0.1, { side: THREE.DoubleSide }), "paint", [1.5, 1.5]));
   }
   return paintCache.get(key);
 }
@@ -609,12 +660,14 @@ export function buildYard() {
   const g = new THREE.Group();
   g.name = "yard";
 
-  const wallMat = std(0xffffff, 0.6, 0.15, { map: ribTexture("#d3d7db", "#a4aab0", true, 1, 1.5) });
-  const gableMat = std(0xffffff, 0.6, 0.15, { map: ribTexture("#d3d7db", "#a4aab0", false, 1.5, 1) });
-  const roofMat = std(0xffffff, 0.55, 0.2, { map: ribTexture("#5a6068", "#3b4046", false, 40, 1) });
-  const doorMat = std(0xffffff, 0.5, 0.2, { map: ribTexture("#9aa1a9", "#6c737b", true, 1, 18) });
+  // Shell UVs are in metres (0.5 = one 2 m tile); box UVs span the whole face
+  const wallMat = surf(std(0xffffff, 0.6, 0.15, { map: ribTexture("#d3d7db", "#a4aab0", true, 1, 1.5) }), "sheet", [0.5, 0.5]);
+  const gableMat = surf(std(0xffffff, 0.6, 0.15, { map: ribTexture("#d3d7db", "#a4aab0", false, 1.5, 1) }), "sheet", [0.5, 0.5]);
+  const roofMat = surf(std(0xffffff, 0.55, 0.2, { map: ribTexture("#5a6068", "#3b4046", false, 40, 1) }), "sheet", [15, 4]);
+  const doorMat = surf(std(0xffffff, 0.5, 0.2, { map: ribTexture("#9aa1a9", "#6c737b", true, 1, 18) }), "sheet", [3.5, 2.6]);
   const trimMat = std(0x565c63, 0.5, 0.3);
-  const concrete = std(0x9c9a94, 0.9, 0);
+  const concrete = surf(std(0x9c9a94, 0.9, 0), "concrete", [15, 1]);
+  const standMat = surf(std(0x9c9a94, 0.9, 0), "concrete", [3, 1]);
   const windowMat = std(0x2a3640, 0.12, 0.1);
 
   // Farm shop, 30 x 16 m, ridge along x, door facing +z
@@ -666,7 +719,7 @@ export function buildYard() {
   const tankGeo = new THREE.CylinderGeometry(1.05, 1.05, 4.2, 28);
   tankGeo.rotateZ(Math.PI / 2);
   g.add(mesh(tankGeo, std(0x3e6b45, 0.45, 0.15), 26, 2.4, -6));
-  g.add(boxes(concrete, [[26, 0.15, -6, 6, 0.3, 3.4]], false));
+  g.add(boxes(standMat, [[26, 0.15, -6, 6, 0.3, 3.4]], false));
   g.add(boxes(MAT.dark, [
     [24.6, 0.85, -6.7, 0.12, 1.2, 0.12], // legs
     [24.6, 0.85, -5.3, 0.12, 1.2, 0.12],

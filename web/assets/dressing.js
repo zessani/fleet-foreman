@@ -16,6 +16,55 @@ function rng(seed) {
   };
 }
 
+// Optional PBR surface sets, see applySurfaces. color = colour map, normal = normalScale,
+// rough = roughness map. repeat is UV tiles per piece, chosen for about 2 m of real surface.
+const KIND = {
+  sheet: { src: "sheetMetal", color: true, normal: 1, rough: true },
+  concrete: { src: "concrete", color: true },
+  galvanised: { src: "galvanised", rough: true },
+  dirt: { src: "dirtTrack", color: true },
+};
+let surfaces = null;
+const surfaced = [];
+
+function refresh(e) {
+  const k = KIND[e.kind];
+  const s = (surfaces && surfaces[k.src]) || {};
+  e.clones.forEach((t) => t.dispose());
+  e.clones = [];
+  // Own clone per use so each part gets its own repeat
+  const use = (t) => {
+    if (!t) return null;
+    const c = t.clone();
+    c.repeat.set(e.repeat[0], e.repeat[1]);
+    c.needsUpdate = true;
+    e.clones.push(c);
+    return c;
+  };
+  const m = e.mat;
+  if (k.color) m.map = use(s.map);
+  if (k.normal) {
+    m.normalMap = use(s.normalMap);
+    m.normalScale.setScalar(k.normal);
+  }
+  if (k.rough) m.roughnessMap = use(s.roughnessMap);
+  m.needsUpdate = true;
+}
+
+function surf(mat, kind, repeat) {
+  const e = { mat, kind, repeat, clones: [] };
+  surfaced.push(e);
+  if (surfaces) refresh(e);
+  return mat;
+}
+
+// surfaces: {sheetMetal, concrete, galvanised, dirtTrack} of {map, normalMap, roughnessMap}.
+// Safe before or after buildDressing, and to call again.
+export function applySurfaces(s) {
+  surfaces = s || {};
+  surfaced.forEach(refresh);
+}
+
 function flatMat(color) {
   return new THREE.MeshLambertMaterial({
     color, side: THREE.DoubleSide,
@@ -23,10 +72,14 @@ function flatMat(color) {
   });
 }
 
-// Merged flat geometry from rectangles and ring slices.
+// Merged flat geometry from rectangles and ring slices. UVs are world (x, z) / 4.
 function flatMesh(rects, rings, mat) {
   const pos = [];
-  const tri = (a, b, c) => pos.push(...a, ...b, ...c);
+  const uv = [];
+  const tri = (a, b, c) => {
+    pos.push(...a, ...b, ...c);
+    uv.push(a[0] / 4, a[2] / 4, b[0] / 4, b[2] / 4, c[0] / 4, c[2] / 4);
+  };
   for (const [x0, z0, x1, z1] of rects) {
     const y = GROUND_Y;
     tri([x0, y, z0], [x0, y, z1], [x1, y, z0]);
@@ -43,6 +96,7 @@ function flatMesh(rects, rings, mat) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, mat);
   m.receiveShadow = true;
@@ -72,7 +126,7 @@ export function buildDressing({ fields, roads, yard }) {
   const TRACK = 0.5, DITCH = 0.3;
 
   const dirt = [], dirtRings = [], concrete = [], water = [], pads = [];
-  const trees = [], pivots = [], towers = [], legs = [], wheels = [];
+  const trees = [], treeInfo = [], pivots = [], towers = [], legs = [], wheels = [];
   const BEARING = (35 * Math.PI) / 180;
 
   for (const f of fields) {
@@ -96,8 +150,10 @@ export function buildDressing({ fields, roads, yard }) {
     // West windbreak, just outside the track
     for (let z = f.z - h; z <= f.z + h; z += 1.6) {
       const s = 0.8 + rand() * 0.5;
-      trees.push(mat4(f.x - o - 0.35 + (rand() - 0.5) * 0.3, 0, z + (rand() - 0.5) * 0.5,
-        rand() * 6.28, s, s, s));
+      const tx = f.x - o - 0.35 + (rand() - 0.5) * 0.3;
+      const tz = z + (rand() - 0.5) * 0.5;
+      trees.push(mat4(tx, 0, tz, rand() * 6.28, s, s, s));
+      treeInfo.push({ x: tx, z: tz, scale: s });
     }
   }
 
@@ -144,13 +200,16 @@ export function buildDressing({ fields, roads, yard }) {
   const bx = yard.x + 7.5, bz = yard.z - 5.5;
   const binAt = (dx, y) => mat4(bx + dx, y, bz);
 
-  const concreteMat = flatMat(0xbdbab0);
+  // Flat UVs span 40 m per unit, so 20 repeats give a 2 m concrete tile
+  const concreteMat = surf(flatMat(0xbdbab0), "concrete", [20, 20]);
   const add = (m) => { if (m) group.add(m); return m; };
-  add(flatMesh(dirt, dirtRings, flatMat(0xb9a584)));
+  add(flatMesh(dirt, dirtRings, surf(flatMat(0xb9a584), "dirt", [10, 10])));
   add(flatMesh(concrete, [], concreteMat));
   add(flatMesh(water, [], flatMat(0x2f5f60)));
 
   const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
+  const gal = () => surf(new THREE.MeshStandardMaterial({ color: 0xcfd3d6, roughness: 0.5, metalness: 0.6 }), "galvanised", [2, 1]);
+  const bin = (c, repeat) => surf(new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, metalness: 0.1 }), "sheet", repeat);
   const geo = (g, y = 0) => g.translate(0, y, 0);
   const alongX = (g) => g.rotateZ(Math.PI / 2);
 
@@ -160,20 +219,24 @@ export function buildDressing({ fields, roads, yard }) {
     group.add(m);
   }
   if (towers.length) {
-    group.add(instanced(alongX(new THREE.CylinderGeometry(0.04, 0.04, 1, 8)), lam(0xcfd3d6), towers, true));
-    group.add(instanced(geo(new THREE.BoxGeometry(0.04, 0.42, 0.04), 0.21), lam(0xcfd3d6), legs, true));
+    group.add(instanced(alongX(new THREE.CylinderGeometry(0.04, 0.04, 1, 8)), gal(), towers, true));
+    group.add(instanced(geo(new THREE.BoxGeometry(0.04, 0.42, 0.04), 0.21), gal(), legs, true));
     group.add(instanced(geo(alongX(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 10)), 0.07), lam(0x2a2a2a), wheels, true));
   }
   if (trees.length) {
-    group.add(instanced(geo(new THREE.CylinderGeometry(0.03, 0.04, 0.4, 6), 0.2), lam(0x5a4632), trees, true));
-    group.add(instanced(geo(new THREE.IcosahedronGeometry(0.38, 1), 0.68), lam(0x4a5a2a), trees, true));
+    const trunks = instanced(geo(new THREE.CylinderGeometry(0.03, 0.04, 0.4, 6), 0.2), lam(0x5a4632), trees, true);
+    const crowns = instanced(geo(new THREE.IcosahedronGeometry(0.38, 1), 0.68), lam(0x4a5a2a), trees, true);
+    trunks.name = "treeTrunks";
+    crowns.name = "treeCrowns";
+    group.add(trunks, crowns);
   }
+  group.userData.trees = treeInfo;
   if (poles.length) {
     group.add(instanced(geo(new THREE.CylinderGeometry(0.022, 0.03, 0.9, 6), 0.45), lam(0x6b5640), poles, true));
     group.add(instanced(new THREE.BoxGeometry(0.5, 0.03, 0.04), lam(0x6b5640), arms, true));
   }
-  group.add(instanced(geo(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 28), 0.55), lam(0xc4c8cb), [binAt(-0.55, 0), binAt(0.55, 0)], true));
-  group.add(instanced(geo(new THREE.ConeGeometry(0.5, 0.35, 28), 0.175), lam(0xa9aeb2), [binAt(-0.55, 1.1), binAt(0.55, 1.1)], true));
+  group.add(instanced(geo(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 28), 0.55), bin(0xc4c8cb, [14, 5]), [binAt(-0.55, 0), binAt(0.55, 0)], true));
+  group.add(instanced(geo(new THREE.ConeGeometry(0.5, 0.35, 28), 0.175), bin(0xa9aeb2, [14, 2]), [binAt(-0.55, 1.1), binAt(0.55, 1.1)], true));
 
   return group;
 }

@@ -18,6 +18,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 const POLL_MS = 500;
 const U = 100;                 // scene units per km (1 unit = 10 m)
@@ -43,6 +44,95 @@ const [richModels, richTerrain, richDressing] = await Promise.all([
 function attempt(make, fallback) {
   try { const made = make(); if (made) return made; } catch (error) { console.warn("3D view: using the plain version.", error); }
   return fallback();
+}
+
+// Downloaded CC0 textures and sky (see web/assets/CREDITS.md). Each is optional:
+// a file that fails to load leaves that surface looking as it did without it.
+const TEX_DIR = "assets/textures/";
+const textureLoader = new THREE.TextureLoader();
+function loadTexture(file, colour) {
+  return new Promise((resolve) => textureLoader.load(TEX_DIR + file, (t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    if (colour) t.colorSpace = THREE.SRGBColorSpace;
+    resolve(t);
+  }, undefined, () => resolve(null)));
+}
+function loadImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = TEX_DIR + file;
+  });
+}
+const TEX = {};
+const SOIL = {};
+let ENV = null;
+await Promise.all([
+  ...Object.entries({
+    dirt_aerial_03: ["diff", "nor"], aerial_mud_1: ["diff"], gravelly_sand: ["diff", "nor"],
+    brushed_concrete: ["diff", "nor", "rough"], corrugated_iron_02: ["nor", "rough"],
+    metal_plate_02: ["nor", "rough"], rubberized_track: ["nor", "rough"],
+  }).flatMap(([id, kinds]) => kinds.map(
+    async (kind) => { (TEX[id] = TEX[id] || {})[kind] = await loadTexture(`${id}_${kind}_1k.jpg`, kind === "diff"); })),
+  ...[["till", "farm_soil"], ["plant", "raked_dirt"], ["mow", "withered_grass"]].map(
+    async ([job, id]) => { SOIL[job] = await loadImage(`${id}_diff_1k.jpg`); }),
+  new Promise((resolve) => new RGBELoader().load(TEX_DIR + "citrus_orchard_road_puresky_1k.hdr", (t) => {
+    t.mapping = THREE.EquirectangularReflectionMapping;
+    ENV = t;
+    resolve();
+  }, undefined, () => resolve())),
+]);
+
+// A copy of an image with its average colour moved to `target`, as a texture.
+// The road texture is dark wet mud; Arizona roads are pale dry dirt of the same grain.
+function recoloured(img, target, size = 1024) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(img, 0, 0, size, size);
+  const data = g.getImageData(0, 0, size, size), px = data.data, sum = [0, 0, 0];
+  for (let i = 0; i < px.length; i += 4) { sum[0] += px[i]; sum[1] += px[i + 1]; sum[2] += px[i + 2]; }
+  const gain = target.map((v, k) => v / (sum[k] / (px.length / 4)));
+  for (let i = 0; i < px.length; i += 4) { px[i] *= gain[0]; px[i + 1] *= gain[1]; px[i + 2] *= gain[2]; }
+  g.putImageData(data, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+const ROAD_MAP = TEX.aerial_mud_1 && TEX.aerial_mud_1.diff ? recoloured(TEX.aerial_mud_1.diff.image, [214, 194, 160]) : null;
+
+// Small tiles of real soil for the coverage paint: tilled soil, planted rows, mowed ground.
+const PATTERN = {};
+{
+  const scratch = document.createElement("canvas").getContext("2d");
+  for (const [job, img] of Object.entries(SOIL)) {
+    if (!img) continue;
+    const tile = document.createElement("canvas");
+    tile.width = tile.height = 160;
+    tile.getContext("2d").drawImage(img, 0, 0, 160, 160);
+    PATTERN[job] = scratch.createPattern(tile, "repeat");
+  }
+}
+
+const surface = (id, colour) => {
+  const set = TEX[id] || {};
+  return { map: colour ? set.diff || undefined : undefined, normalMap: set.nor || undefined, roughnessMap: set.rough || undefined };
+};
+const SURFACES = {
+  paintedMetal: surface("metal_plate_02", false), rubber: surface("rubberized_track", false),
+  // Sheet metal keeps its own paint colour: the downloaded colour map turned the shop dark and brick-like.
+  sheetMetal: surface("corrugated_iron_02", false), concrete: surface("brushed_concrete", true),
+  galvanised: surface("metal_plate_02", false), dirtTrack: { map: ROAD_MAP || undefined },
+};
+// Real metal, rubber and concrete on the generated machinery, buildings and infrastructure.
+for (const module of [richModels, richDressing]) {
+  if (module && typeof module.applySurfaces === "function") {
+    try { module.applySurfaces(SURFACES); } catch (error) { console.warn("3D view: surfaces not applied.", error); }
+  }
 }
 
 const $ = (id) => document.getElementById(id);
@@ -90,6 +180,23 @@ scene.add(sun, sun.target);
 const hemi = new THREE.HemisphereLight(0xbfd4ee, 0x8a6f4d, 1);
 scene.add(hemi);
 const sunDir = new THREE.Vector3(1, 0.2, 0);
+// The sky file lights and reflects on metal and other physical materials only.
+// Its strength follows the clock, so the sun and sky above still set the mood.
+if (ENV) scene.environment = ENV;
+const envMaterials = new Set();
+let envScanAt = -10;
+function updateEnvironment(time, daylight) {
+  if (!ENV) return;
+  if (time - envScanAt > 1.5) {
+    envScanAt = time;
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m && m.isMeshStandardMaterial) envMaterials.add(m);
+    });
+  }
+  const level = 0.1 + 0.55 * daylight;
+  for (const m of envMaterials) m.envMapIntensity = level * (m.userData.envScale ?? 1);
+}
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -125,11 +232,50 @@ function noiseTexture(base, spots, size = 256) {
   return t;
 }
 
+// The desert floor from a real aerial soil texture. Tiling is hidden four ways: the
+// texture is laid twice at different scales and angles and mixed by a very large
+// soft mask, it fades with distance, the fine grain only shows near the camera,
+// and the terrain's own per-vertex colour varies over kilometres.
+function realGround() {
+  const dirt = TEX.dirt_aerial_03 || {};
+  if (!dirt.diff) return null;
+  const material = new THREE.MeshStandardMaterial({ map: dirt.diff, vertexColors: true, roughness: 1, metalness: 0 });
+  if (dirt.nor) {
+    const normal = dirt.nor.clone();
+    normal.repeat.set(4200, 4200);
+    normal.needsUpdate = true;
+    material.normalMap = normal;
+    material.normalScale.set(0.8, 0.8);
+  }
+  material.userData.envScale = 0.3;
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <map_fragment>", `
+#ifdef USE_MAP
+  // The texture is divided by its own average colour, so it only varies the vertex colour.
+  vec3 gMean = vec3( 0.188, 0.122, 0.072 );
+  float gDist = length( vViewPosition );
+  vec3 gA = texture2D( map, mat2( 0.891, -0.454, 0.454, 0.891 ) * vMapUv * 610.0 ).rgb / gMean;
+  vec3 gB = texture2D( map, mat2( 0.629, 0.777, -0.777, 0.629 ) * vMapUv * 173.0 ).rgb / gMean;
+  float gMask = smoothstep( 0.6, 1.4, dot( texture2D( map, mat2( 0.5, 0.866, -0.866, 0.5 ) * vMapUv * 19.0 ).rgb / gMean, vec3( 0.333 ) ) );
+  vec3 gCol = mix( vec3( 1.0 ), mix( gA, gB, gMask ), mix( 0.7, 0.3, smoothstep( 250.0, 1400.0, gDist ) ) );
+  gCol *= mix( 0.92, 1.07, gMask );
+  vec3 gGrain = texture2D( map, vMapUv * 4200.0 ).rgb / gMean;
+  gCol *= mix( vec3( 1.0 ), gGrain, ( 1.0 - smoothstep( 10.0, 120.0, gDist ) ) * 0.9 );
+  diffuseColor.rgb *= gCol;
+#endif`);
+  };
+  return material;
+}
+
 function buildScenery() {
   if (richTerrain) {
     const ok = attempt(() => {
       const g = richTerrain.buildGround(), m = richTerrain.buildMountains();
-      g.traverse((o) => { if (o.isMesh && o.material.color) o.material.color.setRGB(1.5, 1.42, 1.3); });   // sunlit sand
+      g.traverse((o) => {
+        if (!o.isMesh) return;
+        o.material = realGround() || o.material;
+        o.material.color.setRGB(1.5, 1.42, 1.3);   // sunlit sand
+      });
       scene.add(g, m);
       return true;
     }, () => false);
@@ -211,14 +357,31 @@ function drawCrop(g, S, crop) {
   g.strokeStyle = "#5b4630"; g.lineWidth = 6; g.strokeRect(3, 3, S - 6, S - 6);   // field edge
 }
 
-function buildFarm(farm) {
+// Free what the last farm's scene held. Materials and geometry that the model
+// modules cache and share are left alone; they are reused by the next farm.
+function clearFarm() {
+  for (const field of Object.values(fields)) {
+    field.tag.remove();
+    for (const mesh of [field.mesh, field.flash]) { mesh.geometry.dispose(); mesh.material.dispose(); }
+    field.texture.dispose();
+  }
+  for (const mesh of roadMeshes) mesh.geometry.dispose();
+  for (const object of perFarm) {
+    object.traverse((o) => { if (o.isMesh && !o.userData.shared) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+  }
+  perFarm = [];
   world.clear();
+}
+let perFarm = [];   // dressing and scrub, built for one farm
+
+function buildFarm(farm) {
+  clearFarm();
   nodes = {}; fields = {}; roadMeshes = []; lineWidth = 0;
   for (const node of farm.nodes) nodes[node.id] = node;
 
   for (const node of farm.nodes) {
     if (node.kind !== "field") continue;
-    const side = fieldSide(node), S = 512;
+    const side = fieldSide(node), S = 1024;
     const base = document.createElement("canvas"); base.width = base.height = S;
     const baseCtx = base.getContext("2d");
     attempt(() => { if (!richTerrain) return null; richTerrain.drawCrop(baseCtx, S, node.crop); return true; },
@@ -267,7 +430,9 @@ function buildFarm(farm) {
       }),
       yard: depot ? { x: P(depot.x, depot.y).x, z: P(depot.x, depot.y).z } : { x: 0, z: 0 },
     });
+    shapeWindbreak(dressing);
     world.add(dressing);
+    perFarm.push(dressing);
     return dressing;
   }, () => null);
 
@@ -284,6 +449,7 @@ function buildFarm(farm) {
     }
     const scrub = richTerrain.buildScrub(keepOut);
     world.add(scrub);
+    perFarm.push(scrub);
     return scrub;
   }, () => null);
 
@@ -293,35 +459,72 @@ function buildFarm(farm) {
   const centre = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.z * 1.3, 200);
   overview.target.copy(centre);
-  overview.position.set(centre.x + span * 0.13, span * 0.23, centre.z + span * 0.7);
+  overview.position.set(centre.x + span * 0.12, span * 0.24, centre.z + span * 0.66);
   flyTo(overview.position, overview.target, 0);
+}
+
+// Windbreak trees: no CC0 tree model was light enough to repeat along every field,
+// so the generated crowns are made lumpy and tall, each with its own shade of green.
+function shapeWindbreak(dressing) {
+  const crowns = dressing.getObjectByName("treeCrowns");
+  if (!crowns || !crowns.isInstancedMesh) return;
+  const old = crowns.geometry;
+  old.computeBoundingBox();
+  const centre = old.boundingBox.getCenter(new THREE.Vector3()), radius = old.boundingBox.getSize(new THREE.Vector3()).x / 2;
+  const geo = new THREE.IcosahedronGeometry(radius, 2);
+  const pos = geo.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const lump = 1 + 0.22 * Math.sin(v.x * 23 + v.y * 11) * Math.cos(v.z * 19 + v.y * 7);
+    v.multiplyScalar(lump);
+    v.y = v.y * 1.45 + radius * 0.25;            // taller than wide, like a tamarisk or eucalyptus
+    pos.setXYZ(i, v.x + centre.x, v.y + centre.y, v.z + centre.z);
+  }
+  geo.computeVertexNormals();
+  crowns.geometry = geo;
+  const shade = new THREE.Color();
+  for (let i = 0; i < crowns.count; i++) {
+    const k = (Math.sin(i * 12.9898) * 43758.5453) % 1;
+    shade.setHSL(0.24 + 0.04 * k, 0.32 + 0.1 * Math.abs(k), 0.3 + 0.07 * k);
+    crowns.setColorAt(i, shade);
+  }
+  crowns.material.color.set(0xffffff);
+  if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
 }
 
 function ribbon(points, width, y) {
   // A flat strip along a polyline, built in order so drawRange can reveal it.
-  const positions = [], indices = [];
-  let quads = 0;
+  const positions = [], indices = [], uvs = [];
+  let quads = 0, run = 0;
   for (let i = 0; i + 1 < points.length; i++) {
     const a = points[i], b = points[i + 1];
     const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
     if (len < 1e-6) continue;
     const nx = (-dz / len) * width / 2, nz = (dx / len) * width / 2;
     positions.push(a.x + nx, y, a.z + nz, a.x - nx, y, a.z - nz, b.x + nx, y, b.z + nz, b.x - nx, y, b.z - nz);
+    uvs.push(0, run / ROAD_TILE, 1, run / ROAD_TILE, 0, (run + len) / ROAD_TILE, 1, (run + len) / ROAD_TILE);
+    run += len;
     const k = quads * 4;
     indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
     quads++;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;
 }
+const ROAD_TILE = 5;   // the road texture repeats every 50 m along the road
 
 function buildRoads(farm, width) {
   for (const mesh of roadMeshes) { world.remove(mesh); mesh.geometry.dispose(); }
   roadMeshes = [];
-  const material = new THREE.MeshLambertMaterial({ color: 0xe6d0aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -40 });
+  const material = ROAD_MAP
+    ? new THREE.MeshStandardMaterial({ map: ROAD_MAP, color: 0xffffff, roughness: 1, metalness: 0,
+                                       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -40 })
+    : new THREE.MeshLambertMaterial({ color: 0xe6d0aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -40 });
+  material.userData.envScale = 0.3;
   for (const [a, b] of farm.roads || []) {
     if (!nodes[a] || !nodes[b]) continue;
     const mesh = new THREE.Mesh(ribbon([nodePos(a), nodePos(b)], width, 0.01), material);
@@ -469,7 +672,15 @@ function buildYard(farm) {
   const g = new THREE.Group();
   if (!depot) return g;
   g.position.copy(P(depot.x, depot.y));
-  const pad = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: 0x8f8068, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -120 }));
+  const gravel = TEX.gravelly_sand || {};
+  const padMaterial = gravel.diff
+    ? new THREE.MeshStandardMaterial({ map: gravel.diff.clone(), normalMap: gravel.nor ? gravel.nor.clone() : null,
+                                       color: new THREE.Color(1.45, 2.05, 3.0), roughness: 1, metalness: 0 })
+    : new THREE.MeshLambertMaterial({ color: 0x8f8068 });
+  for (const map of [padMaterial.map, padMaterial.normalMap]) if (map) { map.repeat.set(12, 9.5); map.needsUpdate = true; }
+  Object.assign(padMaterial, { polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -120 });
+  padMaterial.userData.envScale = 0.3;
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), padMaterial);
   pad.rotation.x = -Math.PI / 2; pad.position.y = 0.015; pad.receiveShadow = true;
   g.add(pad);
 
@@ -722,14 +933,22 @@ function passState(field, widthM, pct) {
   return { w, pass: 0, top: 0, passWidth: w, east: true, from: 0, to: 0, x: 0 };
 }
 
+// How one pass looks once worked. Real soil tiles where they loaded, flat colour if not.
+function soil(g, job, flat, x, y, w, h) {
+  g.fillStyle = PATTERN[job] || flat;
+  g.fillRect(x, y, w, h);
+}
 const STRIPE = {
-  till: (g, x, y, w, h, i) => { g.fillStyle = i % 2 ? "#4b3727" : "#42301f"; g.fillRect(x, y, w, h);
-                                g.fillStyle = "#2f2116"; g.fillRect(x, y + h - 1, w, 1); },
-  plant: (g, x, y, w, h, i) => { g.fillStyle = i % 2 ? "#6a503a" : "#624934"; g.fillRect(x, y, w, h);
-                                 g.fillStyle = "#3a2a1c"; const n = Math.max(2, Math.round(h / 2.2));
-                                 for (let k = 0; k < n; k++) g.fillRect(x, y + (k + 0.5) * h / n, w, 0.8); },
-  mow: (g, x, y, w, h, i) => { g.fillStyle = i % 2 ? "#c3cf82" : "#b2c070"; g.fillRect(x, y, w, h);
-                               g.fillStyle = "#d9dfa6"; g.fillRect(x, y + h * 0.4, w, Math.max(1, h * 0.2)); },
+  till: (g, x, y, w, h, i) => { soil(g, "till", "#47331f", x, y, w, h);
+                                g.fillStyle = i % 2 ? "rgba(30,18,8,0.30)" : "rgba(30,18,8,0.42)"; g.fillRect(x, y, w, h);
+                                g.fillStyle = "rgba(20,12,6,0.55)"; g.fillRect(x, y + h - 1.5, w, 1.5); },
+  plant: (g, x, y, w, h, i) => { soil(g, "plant", "#66503a", x, y, w, h);
+                                 g.fillStyle = i % 2 ? "rgba(70,48,28,0.30)" : "rgba(70,48,28,0.40)"; g.fillRect(x, y, w, h);
+                                 g.fillStyle = "rgba(40,28,16,0.75)"; const n = Math.max(2, Math.round(h / 4));
+                                 for (let k = 0; k < n; k++) g.fillRect(x, y + (k + 0.5) * h / n, w, 1.4); },
+  mow: (g, x, y, w, h, i) => { soil(g, "mow", "#bac878", x, y, w, h);
+                               g.fillStyle = i % 2 ? "rgba(196,210,120,0.42)" : "rgba(170,190,100,0.42)"; g.fillRect(x, y, w, h);
+                               g.fillStyle = "rgba(226,226,170,0.6)"; g.fillRect(x, y + h * 0.4, w, Math.max(1.5, h * 0.2)); },
   spray: (g, x, y, w, h, i) => { g.fillStyle = i % 2 ? "rgba(18,42,58,0.34)" : "rgba(18,42,58,0.26)"; g.fillRect(x, y, w, h); },
 };
 
@@ -893,15 +1112,18 @@ function clockText(minute) {
 }
 
 function applyState(next) {
-  const key = `${next.farm.name}|${next.farm.nodes.map((n) => n.id + n.x + n.y + (n.area_ha || "")).join(",")}`;
+  const key = `${next.scenario}|${next.seed ?? ""}|${next.farm.name}|${next.farm.nodes.map((n) => n.id + n.x + n.y + (n.area_ha || "")).join(",")}`;
   if (key !== farmKey) {
     farmKey = key;
     buildFarm(next.farm);
     for (const id of Object.keys(tractors)) {
+      tractors[id].tag.remove();
+      tractors[id].puffs.dispose();
       tractorLayer.remove(tractors[id].group, tractors[id].puffs);
       delete tractors[id];
     }
-    for (const r of routes) routeLayer.remove(r.mesh);
+    for (const r of routes) { routeLayer.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
+    fleetKey = "";
     routes = []; routeKey = ""; routePlanNo = -1; lastPlanTractor = {};
     for (const id of Object.keys(shown)) delete shown[id];
     followId = selectedId = null;
@@ -1028,6 +1250,7 @@ function updateSun(dt) {
   scene.fog.color.setRGB(0.93 - 0.1 * high, 0.76 + 0.06 * high, 0.6 + 0.26 * high);   // haze matched to the horizon
   renderer.toneMappingExposure = 0.6 - 0.06 * high;
   state.dawn = high < 0.5;
+  state.daylight = high;
 }
 
 function updateShadowFrustum(distance) {
@@ -1199,7 +1422,27 @@ function updateCard() {
   $("card-fuel-bar").style.background = t.fuel_pct < 25 ? "var(--danger)" : t.fuel_pct < 60 ? "var(--accent)" : "var(--good)";
 }
 
-window.foremanView = { camera, controls, scene, overview, renderer };   // for inspection from the browser console
+window.foremanView = { camera, controls, scene, overview, renderer, fps: 0 };
+const fpsBox = new URLSearchParams(location.search).has("fps") ? document.createElement("div") : null;
+if (fpsBox) {
+  fpsBox.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);padding:4px 10px;border-radius:6px;"
+    + "background:#111714eb;color:#fff;font:700 15px system-ui;";
+  document.body.append(fpsBox);
+}
+let fpsFrames = 0, fpsSince = performance.now();
+function countFrame() {
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsSince < 1000) return;
+  window.foremanView.fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
+  if (document.visibilityState === "visible" && state && state.running) {
+    // Kept so a reading taken while the page was in front can be read back later.
+    window.foremanView.fpsInFront = { fps: window.foremanView.fps, at: new Date().toISOString(), clock: state.clock };
+  }
+  if (fpsBox) fpsBox.textContent = `${window.foremanView.fps} fps`;
+  fpsFrames = 0;
+  fpsSince = now;
+}   // for inspection from the browser console
 
 const timer = new THREE.Clock();
 function frame() {
@@ -1243,6 +1486,7 @@ function frame() {
   }
 
   updateSun(dt);
+  updateEnvironment(time, state ? state.daylight ?? 0.5 : 0.5);
   updateShadowFrustum(distance);
   updateFields(dt, Math.min(elapsed, 3));
   updateTractors(dt, iconScale, time);
@@ -1255,6 +1499,7 @@ function frame() {
 
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
+  countFrame();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
