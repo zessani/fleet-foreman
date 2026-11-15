@@ -21,6 +21,7 @@ from foreman.run import Run
 from foreman.state import JobState
 
 WATCH_MIN = 1.0   # how often the status feed is read, in simulated minutes
+DRIFT_MIN = 15.0  # a job finishing this far behind plan triggers a re-plan
 TIME_EPS = 1e-6
 EVENT_TYPES = ("breakdown", "repair", "block_road", "open_road", "set_priority", "add_job")
 
@@ -135,10 +136,11 @@ class Day:
 
     def _read_status_feed(self) -> None:
         self.crew.recovery.note_progress(self.foreman.sim.events)
+        drift = self._drift_events(self.foreman.sim.events)
         self.foreman.sim.events.clear()
-        events = self.crew.recovery.watch()
+        events = self.crew.recovery.watch() + drift
         if events:
-            # Failures seen in the same reading share one re-plan.
+            # Everything seen in the same reading shares one re-plan.
             self.crew.handle(events)
 
         self.baseline.sim.events.clear()
@@ -148,6 +150,20 @@ class Day:
                 self.baseline.sim.tractors[event["tractor"]].break_down()
         if baseline_events:
             self._replan_baseline()
+
+    def _drift_events(self, sim_events: list[dict]) -> list[dict]:
+        """Jobs that just finished well behind plan, while other work is still waiting."""
+        if self.foreman.sim.all_done():
+            return []
+        drift = []
+        for event in sim_events:
+            planned = self.foreman.rows.get(event["job"])
+            if event["type"] == "job_done" and planned is not None:
+                behind = event["t"] - planned["finish"]
+                if behind > DRIFT_MIN:
+                    drift.append({"type": "drift", "job": event["job"],
+                                  "behind_min": round(behind, 1)})
+        return drift
 
     def _replan_baseline(self) -> None:
         baseline = self.baseline

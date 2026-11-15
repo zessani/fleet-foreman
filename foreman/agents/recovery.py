@@ -39,6 +39,11 @@ class RecoveryAgent(Agent):
             self._record_incident(event)
         elif event["type"] == "repaired":
             self.say("back_in_service", f"{self.tractor_name(event['tractor'])} is back in service.")
+        elif event["type"] == "drift":
+            self.say("drift", f"{self.job_label(event['job'])} finished {event['behind_min']:.0f} "
+                              "min behind plan. Re-planning the rest of the day from where "
+                              "things really are.", job=event["job"],
+                     behind_min=event["behind_min"])
 
     def _record_incident(self, event: dict) -> None:
         tractor_id, job_id = event["tractor"], event.get("job")

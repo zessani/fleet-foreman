@@ -249,3 +249,20 @@ def test_the_farm_given_to_a_day_is_not_changed_by_its_events() -> None:
     day = Day(raw)
     day.apply({"type": "add_job", "job": {"id": "J6", "type": "spray", "field": "F3"}})
     assert raw == before
+
+
+def test_a_job_that_runs_well_behind_plan_triggers_a_replan() -> None:
+    # West Bench tills at 60% of the catalog rate, which the planner does not know.
+    # Planting there has to wait for it, so the rest of the day needs new times.
+    day = run_day(example_raw(truth={"*|till|F4": 0.6}))
+    drift = day.memory.log.of("drift")
+    assert len(drift) == 1 and drift[0]["data"]["job"] == "J2"
+    assert drift[0]["data"]["behind_min"] > 15
+    assert ["drift"] in [replan["events"] for replan in day.foreman.replans]
+    assert day.foreman.sim.all_done()
+    check_day_is_clean(day)
+
+
+def test_a_day_that_runs_to_plan_is_never_replanned() -> None:
+    day = run_day(example_raw(truth={}))
+    assert [replan["events"] for replan in day.foreman.replans] == [["jobs_submitted"]]
