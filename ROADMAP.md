@@ -54,7 +54,7 @@ Done when: we can break any tractor and the plan repairs with no human.
 ### Zayyan
 - [ ] Breakdown recovery, no lost or repeated work
 - [ ] Safety check before every plan is sent
-- [ ] Six named agents with a log
+- [ ] Five named agents with a log
 - [ ] Plain explanation of each plan change
 
 ### Ahmed

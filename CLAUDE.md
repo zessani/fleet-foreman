@@ -107,21 +107,20 @@ field. AgOpenGPS does that.
 
 ## 6. Architecture
 
-Six agents share one memory and call fixed tools. Agents decide what to do.
+Five agents share one memory and call fixed tools. Agents decide what to do.
 Tools do the exact work, so plans are fast and never break a rule.
 
 | Agent | Job | Tool it calls |
 |---|---|---|
 | Orchestrator | Runs the loop, routes each event to the right agents | Task queue |
-| Fleet | Decides which tractor does which job, in what order | Planner (solver) |
-| Implement | Picks the implement for each job, checks the tractor can pull it | Implement catalog |
+| Fleet | Decides which tractor does which job, in what order, and with which implement | Planner (solver), implement picker |
 | Navigation | Routes between fields, stops tractors sharing a field | Route finder, conflict checker |
 | Safety | Passes or rejects every plan. Replaces human approval | Rule verifier |
 | Recovery | Watches tractors, spots a failure, starts the re-plan, records lessons | Tractor status feed |
 
 **The loop**
 1. Jobs arrive (or an event happens).
-2. Implement, Fleet, and Navigation build a plan.
+2. Fleet and Navigation build a plan. Fleet picks each implement with the implement picker tool.
 3. Safety checks it. A plan that fails a hard check is never sent.
 4. The plan is dispatched to the tractors.
 5. Recovery watches for trouble.
@@ -131,11 +130,11 @@ Tools do the exact work, so plans are fast and never break a rule.
 
 | Event | Agents, in order |
 |---|---|
-| jobs_submitted | Implement, Fleet, Navigation, Safety, dispatch |
-| breakdown | Recovery, Implement, Fleet, Navigation, Safety, dispatch |
+| jobs_submitted | Fleet, Navigation, Safety, dispatch |
+| breakdown | Recovery, Fleet, Navigation, Safety, dispatch |
 | repaired | Recovery, Fleet, Navigation, Safety, dispatch |
 | road_blocked / road_opened | Navigation, Fleet, Navigation, Safety, dispatch |
-| priority_changed / job_added | Implement, Fleet, Navigation, Safety, dispatch |
+| priority_changed / job_added | Fleet, Navigation, Safety, dispatch |
 | job_done / work_sample | Recovery (learn), no re-plan |
 
 **Memory, three kinds**
@@ -259,7 +258,7 @@ Shapes inside the state
 - `safety.checks[]`: `{id, name, passed, severity, detail}`. `id` is the rule
   number from section 12. `severity` is `hard` or `warning`.
 - `log[]`: `{t, clock, agent, event, message}`. `t` is minutes from the start
-  of the day. `agent` is one of the six agent names.
+  of the day. `agent` is one of the five agent names.
 - `speed` is simulated minutes per real second: 1, 4, 16, or 60.
 - Job and implement `type` values: `spray | mow | till | plant`.
 
@@ -409,7 +408,7 @@ Pressing start runs a full day on screen. Every job finishes. The referee
 reports zero violations. Foreman beats the baseline on travel and idle time.
 
 ### Phase 2: breakdowns and the real tractor (2:00 to 3:00)
-- Zayyan: breakdown recovery, Safety gate, six named agents with a log,
+- Zayyan: breakdown recovery, Safety gate, five named agents with a log,
   plain-language explanation of each re-plan.
 - Ahmed: AgOpenGPS link driving one tractor, "break this tractor" control,
   breakdown test cases.
@@ -505,7 +504,7 @@ to 45 minutes. If it is not working by 2:45, stop and document the message forma
 
 1. Problem, 20 s. A person still decides who goes where and redoes it when
    something breaks.
-2. Product, 20 s. Six agents, no human in the loop.
+2. Product, 20 s. Five agents, no human in the loop.
 3. Live demo, 90 s. Submit jobs, watch the plan run next to the baseline,
    break a tractor, watch the plan repair and explain itself. Show the
    tractor in AgOpenGPS.

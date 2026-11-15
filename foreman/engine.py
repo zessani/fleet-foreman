@@ -219,7 +219,7 @@ class Engine:
         self.baseline.replan()
         planned = sum(len(route) for route in new_plan.routes.values())
         self._log("Orchestrator", "jobs_submitted",
-                  f"{len(self.farm.jobs)} jobs submitted. Routing: Implement, Fleet, Navigation, "
+                  f"{len(self.farm.jobs)} jobs submitted. Routing: Fleet, Navigation, "
                   "Safety, dispatch.")
         self._log("Fleet", "plan",
                   f"Planned {planned} jobs across {len(new_plan.routes)} tractors in "
