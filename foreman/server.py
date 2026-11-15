@@ -7,6 +7,7 @@ The endpoints are listed in CLAUDE.md section 8c.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -31,9 +32,32 @@ TICK_SECONDS = 0.1
 # The model key is read from .env into the environment once, here. It is never
 # logged, written anywhere, or put in the state. With no key the AI agents are off.
 load_env_file(ROOT / ".env")
+
+
+def _agopenweb_config() -> tuple[dict[str, str] | None, tuple[float, float]]:
+    """Read T1=ws://...;T2=ws://... and lat,lon without hiding bad configuration."""
+    raw = os.getenv("FOREMAN_AGOPENWEB_URLS", "").strip()
+    urls = None
+    if raw:
+        urls = {}
+        for item in raw.split(";"):
+            tractor, separator, url = item.partition("=")
+            if not separator or not tractor.strip() or not url.strip():
+                raise RuntimeError("FOREMAN_AGOPENWEB_URLS must be T1=ws://host/ws;T2=...")
+            urls[tractor.strip()] = url.strip()
+    origin_raw = os.getenv("FOREMAN_AGOPENWEB_ORIGIN", "33.4484,-112.0740")
+    try:
+        latitude, longitude = (float(value.strip()) for value in origin_raw.split(",", 1))
+    except ValueError as exc:
+        raise RuntimeError("FOREMAN_AGOPENWEB_ORIGIN must be latitude,longitude") from exc
+    return urls, (latitude, longitude)
+
+
+AGOPENWEB_URLS, AGOPENWEB_ORIGIN = _agopenweb_config()
 engine = Engine(log_path=EVENT_LOG_PATH, client=get_client(),
                 learning=Learning(ROOT / "runs" / "learned.json"),
-                lessons_path=ROOT / "runs" / "lessons.jsonl")
+                lessons_path=ROOT / "runs" / "lessons.jsonl",
+                agopenweb_urls=AGOPENWEB_URLS, agopenweb_origin=AGOPENWEB_ORIGIN)
 
 
 def _clock_loop(stop: threading.Event) -> None:

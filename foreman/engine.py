@@ -42,13 +42,17 @@ def default_scenario() -> Path:
 class Engine:
     def __init__(self, scenario: Path | None = None, log_path: Path | None = None,
                  client: ModelClient | None = None, learning=None,
-                 lessons_path: Path | None = None) -> None:
+                 lessons_path: Path | None = None,
+                 agopenweb_urls: dict[str, str] | None = None,
+                 agopenweb_origin: tuple[float, float] = (33.4484, -112.0740)) -> None:
         # The clock thread and the request handlers both touch the engine.
         self._lock = threading.RLock()
         self._log_path = log_path
         self._client = client          # the model behind the AI agents; None means they are off
         self.learning = learning       # learned work rates, kept across days
         self._lessons_path = lessons_path
+        self._agopenweb_urls = agopenweb_urls
+        self._agopenweb_origin = agopenweb_origin
         self.day: Day | None = None
         self.running = False
         self.speed = DEFAULT_SPEED
@@ -64,11 +68,15 @@ class Engine:
     def reset(self) -> None:
         with self._lock:
             self.running = False
+            if self.day is not None:
+                self.day.foreman.close()
             if self.learning is not None:
                 self.learning.start_day()  # closes the day before, if it recorded anything
                 self.learning.save()
             self.day = Day(self.raw, log_path=self._log_path, learning=self.learning,
-                           ai=AiCrew(self._client), lessons_path=self._lessons_path)
+                           ai=AiCrew(self._client), lessons_path=self._lessons_path,
+                           agopenweb_urls=self._agopenweb_urls,
+                           agopenweb_origin=self._agopenweb_origin)
             self._full_days: dict[tuple[bool, int], dict] = {}  # report cache
 
     def control(self, action: str | None, speed: float | None = None) -> dict:
@@ -162,6 +170,7 @@ class Engine:
                 "clock_speed": self.clock_speed,
                 "finished": day.finished,
                 "scenario": self.scenario,
+                "execution": "agopenweb" if day.foreman.live else "simulation",
                 "farm": {
                     "name": farm.name,
                     "nodes": farm.raw["nodes"],

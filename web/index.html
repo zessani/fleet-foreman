@@ -547,7 +547,10 @@
       title.append(name, badge);
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `${tractor.job || "No job"} · ${tractor.mounted || "No implement"} · Fuel ${tractor.fuel_pct ?? "?"}%`;
+      const source = tractor.agopenweb
+        ? `AgOpenWeb ${tractor.agopenweb.connected ? "connected" : "offline"} · ${tractor.speed_kph ?? 0} km/h`
+        : "SimTractor";
+      meta.textContent = `${tractor.job || "No job"} · ${tractor.mounted || "No implement"} · Fuel ${tractor.fuel_pct ?? "?"}% · ${source}`;
       card.append(title, meta);
       if (job) {
         const progress = document.createElement("div");
@@ -710,8 +713,9 @@
     try {
       const response = await fetch("/api/state", { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      renderState(await response.json());
-      setConnected(true, "Live");
+      const nextState = await response.json();
+      renderState(nextState);
+      setConnected(true, nextState.execution === "agopenweb" ? "Live · AgOpenWeb" : "Live · Simulator");
     } catch (error) {
       setConnected(false, "Server unavailable");
     } finally {

@@ -22,6 +22,7 @@ from foreman.model import farm_from_dict, job_from_dict
 from foreman.nav import RoadMap
 from foreman.run import Run
 from foreman.state import JobState
+from foreman.agopenweb_adapter import build_agopenweb_adapters
 
 WATCH_MIN = 1.0   # how often the status feed is read, in simulated minutes
 DRIFT_MIN = 15.0  # a job finishing this far behind plan triggers a re-plan
@@ -32,13 +33,19 @@ EVENT_TYPES = ("breakdown", "repair", "block_road", "open_road", "set_priority",
 class Day:
     def __init__(self, raw: dict, use_truth: bool = True, extra_events: list[dict] | None = None,
                  log_path: Path | None = None, learning=None, ai: AiCrew | None = None,
-                 lessons_path: Path | None = None) -> None:
+                 lessons_path: Path | None = None, agopenweb_urls: dict[str, str] | None = None,
+                 agopenweb_origin: tuple[float, float] = (33.4484, -112.0740)) -> None:
         # Events can change the job list, so each day works on its own copy of the farm.
         self.farm = farm_from_dict(copy.deepcopy(raw))
         self.road_map = RoadMap(self.farm.raw)
         self.blocked: set[frozenset[str]] = set()
         self.memory = Memory(self.farm.day_start_min, log_path, lessons_path)
-        self.foreman = Run(self.farm, self.road_map, self.blocked, use_truth)
+        adapters = None
+        if agopenweb_urls:
+            adapters = build_agopenweb_adapters(
+                self.farm, agopenweb_urls, agopenweb_origin[0], agopenweb_origin[1]
+            )
+        self.foreman = Run(self.farm, self.road_map, self.blocked, use_truth, adapters)
         self.baseline = Run(self.farm, self.road_map, self.blocked, use_truth)
         # The learning loop is Foreman's own memory; the baseline does not learn.
         self.learning = learning
@@ -108,7 +115,7 @@ class Day:
             next_event = self._pending[0]["at"] if self._pending else math.inf
             step = min(target, self._next_watch, next_event) - self.now
             if step > TIME_EPS:
-                self.foreman.sim.advance(step)
+                self.foreman.advance(step)
                 self.baseline.sim.advance(step)
             while self._pending and self._pending[0]["at"] <= self.now + TIME_EPS:
                 self._apply(self._pending.pop(0))
@@ -165,8 +172,7 @@ class Day:
             # Only the tractor changes here. Nobody is told: the recovery monitor
             # has to notice it from the status feed.
             for run in (self.foreman, self.baseline):
-                tractor = run.sim.tractors[event["tractor"]]
-                tractor.stall() if event.get("silent") else tractor.break_down()
+                run.break_down(event["tractor"], bool(event.get("silent")))
             if event.get("report"):
                 self.faults[event["tractor"]] = {"report": event["report"], "at": self.now,
                                                  "true_downtime": event.get("repair_after_min")}
@@ -180,7 +186,7 @@ class Day:
             self._release_hold(event["job"])
         elif kind == "repair":
             for run in (self.foreman, self.baseline):
-                run.sim.tractors[event["tractor"]].repair()
+                run.repair(event["tractor"])
             self.faults.pop(event["tractor"], None)
         elif kind in ("block_road", "open_road"):
             name = "road_blocked" if kind == "block_road" else "road_opened"
