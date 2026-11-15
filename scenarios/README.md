@@ -1,6 +1,6 @@
 # scenarios
 
-Owner: Vishwa
+Owner: Vishva
 
 Farm files in JSON. `example_farm.json` is the pattern to copy. The format is CLAUDE.md section 8a.
 
