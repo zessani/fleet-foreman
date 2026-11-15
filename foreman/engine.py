@@ -258,7 +258,7 @@ class Engine:
         if latest is None:
             return None
         return {"sentence": latest["sentence"], "decision": latest["decision"],
-                "current": self.selftune.settings()["idle_weight"], "days": latest["days"]}
+                "current": self.selftune.settings(), "days": latest["days"]}
 
     def report(self) -> dict:
         """Foreman against the baseline: same farm, same clock, same events."""
