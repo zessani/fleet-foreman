@@ -64,7 +64,9 @@ def _tools(case: RecoveryCase) -> list[Tool]:
         Tool("past_lessons", "Lessons from earlier faults: report, downtime and what was learned. "
              "actual_downtime_min in a lesson is a measured repair time for that kind of fault: it outweighs "
              "any earlier estimate (downtime_min, estimated_min). For the same kind of fault, start your "
-             "estimate from it and move only if this report clearly differs.",
+             "estimate from it and move only if this report clearly differs. still_down_after_min means the "
+             "tractor was still out of service that many minutes after the fault, so the real downtime "
+             "was longer than that; not_repaired_that_day means it never came back that day.",
              copy.deepcopy(case.past_lessons)),
     ]
 
@@ -79,7 +81,9 @@ def _prompt(case: RecoveryCase) -> str:
         "estimate. If a past lesson has actual_downtime_min for the same kind of fault, that is a measured "
         "repair time and it outweighs any earlier estimate, including your own: start from it and move "
         "only if this report clearly differs (for example a part has to be fetched, or a mechanic is "
-        "already on site). Otherwise use the lessons you have.\n"
+        "already on site). If a past lesson has still_down_after_min for the same kind of fault, an "
+        "earlier estimate was too short: the real downtime was longer than that number, and with "
+        "not_repaired_that_day it lasted the rest of the day. Otherwise use the lessons you have.\n"
         "- reason: one short line.\n"
         "- lesson: one sentence about this kind of fault that will be useful next time."
     )

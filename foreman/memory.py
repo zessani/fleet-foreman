@@ -56,6 +56,11 @@ def _same_report(text: str) -> str:
     return " ".join(text.lower().split())
 
 
+def _is_measured(lesson: dict) -> bool:
+    """A lesson that carries a fact, not a guess: a real repair time, or a time the tractor was still down."""
+    return "actual_downtime_min" in lesson or "still_down_after_min" in lesson
+
+
 class Memory:
     def __init__(self, day_start_min: float, log_path: Path | None = None,
                  lessons_path: Path | None = None) -> None:
@@ -129,15 +134,15 @@ class Memory:
         lesson exists for the same report text (the measurement supersedes it)."""
         words = _key_words(report)
         measured = {_same_report(item.get("report", "")) for item in self.lessons
-                    if "actual_downtime_min" in item}
+                    if _is_measured(item)}
         candidates = [(index, lesson) for index, lesson in enumerate(self.lessons)
-                      if "actual_downtime_min" in lesson
+                      if _is_measured(lesson)
                       or _same_report(lesson.get("report", "")) not in measured]
 
         def score(item: tuple[int, dict]) -> tuple[int, int, int]:
             index, lesson = item
             shared = len(words & _key_words(lesson.get("report", "")))
-            return (1 if "actual_downtime_min" in lesson else 0, shared, index)
+            return (1 if _is_measured(lesson) else 0, shared, index)
 
         ranked = sorted(candidates, key=score, reverse=True)
         return [lesson for index, lesson in ranked
