@@ -14,7 +14,7 @@
   #labels { position: fixed; inset: 0; pointer-events: none; }
   .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
            padding: 12px 16px; backdrop-filter: blur(10px); box-shadow: 0 2px 14px #0007; }
-  #readout { top: 14px; left: 14px; max-width: min(46vw, 620px); }
+  #readout { top: 14px; left: 14px; width: min(46vw, 620px); }
   #readout .row { display: flex; align-items: baseline; gap: 14px; }
   #clock { font-size: clamp(30px, 3.4vw, 52px); font-weight: 800; font-variant-numeric: tabular-nums; }
   #plan-no { font-size: clamp(16px, 1.6vw, 24px); font-weight: 700; color: var(--accent); }
@@ -50,8 +50,15 @@
   #incident { display: none; top: 14px; right: 14px; padding: 10px 16px; border-left: 6px solid var(--danger);
               background: #2c1817f5; font-size: clamp(14px, 1.3vw, 20px); line-height: 1.35; }
   #incident .what { font-weight: 700; color: #ffd9d6; }
-  #incident .did, #incident .ai { margin-top: 5px; }
+  #incident .did, #incident .ai, #incident .now { margin-top: 5px; }
   #incident .ai b, #incident .did b { font-weight: 700; }
+  /* The repair result: estimate beside actual, large enough to read from the back of the room. */
+  #incident .repair { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #6b3a37; gap: 10px 26px;
+                      flex-wrap: wrap; align-items: baseline; }
+  #incident .repair.shown { display: flex; }
+  #incident .repair span { color: #c3d1c8; font-size: clamp(13px, 1.1vw, 17px); }
+  #incident .repair b { display: block; color: #fff; font-size: clamp(22px, 2.3vw, 36px); font-weight: 800;
+                        font-variant-numeric: tabular-nums; line-height: 1.1; }
   #brand { font-size: clamp(13px, 1.05vw, 16px); font-weight: 700; color: #c3d1c8; letter-spacing: 0.02em;
            margin-bottom: 2px; }
   #brand b { color: var(--accent); }
@@ -72,7 +79,7 @@
   .fleet-row .what { color: #c3d1c8; font-size: 0.86em; }
   .fleet-row .bar { grid-column: 2 / 4; height: 5px; border-radius: 3px; background: #3b4d43; overflow: hidden; }
   .fleet-row .bar span { display: block; height: 100%; background: #c3d1c8; }
-  #scalebar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); pointer-events: none;
+  #scalebar { position: fixed; left: 58%; bottom: 18px; transform: translateX(-50%); pointer-events: none;
               text-align: center; font-size: clamp(12px, 1vw, 15px); font-weight: 700; color: #fff;
               text-shadow: 0 1px 3px #000c; }
   #scalebar div { height: 6px; margin-top: 3px; border: 2px solid #fff; border-top: none;
@@ -103,7 +110,13 @@
   <div id="status"></div>
 </div>
 
-<div id="incident" class="panel"><div class="what" id="incident-what"></div><div class="did" id="incident-did"></div><div class="ai" id="incident-ai"></div></div>
+<div id="incident" class="panel">
+  <div class="what" id="incident-what"></div>
+  <div class="did" id="incident-did"></div>
+  <div class="ai" id="incident-ai"></div>
+  <div class="now" id="incident-now"></div>
+  <div class="repair" id="incident-repair"></div>
+</div>
 
 <div id="fleet" class="panel">
   <h3>Fleet</h3>
@@ -129,6 +142,7 @@
   <button id="btn-follow">Follow</button>
   <button id="btn-yard">Yard</button>
   <button id="btn-orbit">Orbit</button>
+  <button id="btn-director" title="When a tractor breaks down, move the camera to it, hold while the banner fills in, then return to the overview">Director</button>
   <a class="button" href="./">Dashboard</a>
 </div>
 

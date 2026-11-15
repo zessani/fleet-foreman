@@ -38,10 +38,11 @@ const FUEL_BAR = (pct) => (pct < 25 ? "var(--danger)" : "#c3d1c8");
 
 // Richer models and terrain live in web/assets. If either file is missing or
 // breaks, the plain built-in versions below are used, so the page never fails.
-const [richModels, richTerrain, richDressing] = await Promise.all([
+const [richModels, richTerrain, richDressing, richCrops] = await Promise.all([
   import("./assets/models.js").catch(() => null),
   import("./assets/terrain.js").catch(() => null),
   import("./assets/dressing.js").catch(() => null),
+  import("./assets/crops.js").catch(() => null),
 ]);
 function attempt(make, fallback) {
   try { const made = make(); if (made) return made; } catch (error) { console.warn("3D view: using the plain version.", error); }
@@ -382,7 +383,7 @@ function freeTree(root) {
 }
 
 function clearFarm() {
-  for (const field of Object.values(fields)) { freeTree(field.mesh); freeTree(field.flash); }
+  for (const field of Object.values(fields)) { freeTree(field.mesh); freeTree(field.flash); if (field.mask) field.mask.texture.dispose(); }
   for (const mesh of roadMeshes) mesh.geometry.dispose();
   for (const object of perFarm) freeTree(object);
   freeTree(yard);
@@ -395,6 +396,57 @@ function clearFarm() {
 }
 let perFarm = [];   // dressing and scrub, built for one farm
 let barrierKey = null;
+
+// Close-up crop detail. Each crop has one small top-down tile drawn at true scale
+// (lettuce heads on beds, citrus crowns on a grid, alfalfa, cotton rows). A field
+// shows it only near the camera, so the overview costs nothing extra, and only
+// where the crop is still standing: a mask follows the worked passes.
+const cropDetails = new Map();
+function cropDetail(crop) {
+  if (!richCrops) return null;
+  if (!cropDetails.has(crop)) {
+    cropDetails.set(crop, attempt(() => {
+      const tile = richCrops.cropTile(crop, 512);
+      const texture = new THREE.CanvasTexture(tile.canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.anisotropy = 8;
+      KEEP_TEXTURES.add(texture);
+      return { texture, metres: tile.metres };
+    }, () => null));
+  }
+  return cropDetails.get(crop);
+}
+// The mask's red channel says how much crop is standing (bare soil none, stubble about half);
+// its green channel darkens a sprayed, damp pass. Each pass multiplies what is already there.
+const MASK = { till: "rgb(0,255,255)", plant: "rgb(0,255,255)", mow: "rgb(120,255,255)", spray: "rgb(255,205,255)" };
+
+function addCropDetail(field, base) {
+  const detail = cropDetail(field.node.crop);
+  if (!detail) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  field.mask = { ctx, texture, size: 256 };
+  const repeat = field.side * 10 / detail.metres;
+  field.mesh.material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, { cropDetail: { value: detail.texture }, cropMask: { value: texture }, cropRepeat: { value: repeat } });
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <map_pars_fragment>", "#include <map_pars_fragment>\nuniform sampler2D cropDetail;\nuniform sampler2D cropMask;\nuniform float cropRepeat;")
+      .replace("#include <map_fragment>", `#include <map_fragment>
+#ifdef USE_MAP
+  float cNear = 1.0 - smoothstep( 7.0, 30.0, length( vViewPosition ) );
+  if ( cNear > 0.001 ) {
+    vec2 cState = texture2D( cropMask, vMapUv ).rg;                 // standing crop, dampness
+    vec3 cPlants = texture2D( cropDetail, vMapUv * cropRepeat ).rgb * cState.g;
+    diffuseColor.rgb = mix( diffuseColor.rgb, cPlants, cNear * cState.r );
+  }
+#endif`);
+  };
+}
 
 function buildFarm(farm) {
   clearFarm();
@@ -433,7 +485,8 @@ function buildFarm(farm) {
     label.center.set(0.5, 1.15);
     mesh.add(label);
     world.add(mesh, flash);
-    fields[node.id] = { node, side, round, radius: side / 2, mesh, ctx, base, texture, key: "", flash, flashT: 0, S, tag };
+    fields[node.id] = { node, side, round, radius: side / 2, mesh, ctx, base, texture, key: "", flash, flashT: 0, S, tag, mask: null };
+    addCropDetail(fields[node.id], base);
     if (round) { baseCtx.strokeStyle = "#5b4630"; baseCtx.lineWidth = 6; baseCtx.beginPath(); baseCtx.arc(S / 2, S / 2, S / 2 - 3, 0, 7); baseCtx.stroke(); ctx.drawImage(base, 0, 0); }
   }
 
@@ -1038,6 +1091,8 @@ function paintField(field, jobs, catalog, planImplement) {
   field.key = key;
   const g = field.ctx, S = field.S, px = S / field.side;
   g.drawImage(field.base, 0, 0);
+  const mask = field.mask, mpx = mask ? mask.size / field.side : 0;
+  if (mask) { mask.ctx.fillStyle = "#fff"; mask.ctx.fillRect(0, 0, mask.size, mask.size); }
   for (const job of jobs) {
     const pct = shown[job.id] ?? job.pct;
     if (pct <= 0) continue;
@@ -1048,8 +1103,15 @@ function paintField(field, jobs, catalog, planImplement) {
       const [from, to] = i < st.pass ? passSpan(field, i, st.w) : [st.from, st.to];
       if (to - from <= 0) continue;
       draw(g, from * px, y, (to - from) * px, h, i);
+      if (mask && MASK[job.type]) {
+        mask.ctx.globalCompositeOperation = "multiply";
+        mask.ctx.fillStyle = MASK[job.type];
+        mask.ctx.fillRect(from * mpx, i * st.w * mpx, (to - from) * mpx, Math.min(st.w, field.side - i * st.w) * mpx);
+        mask.ctx.globalCompositeOperation = "source-over";
+      }
     }
   }
+  if (mask) mask.texture.needsUpdate = true;
   g.strokeStyle = "#5b4630"; g.lineWidth = 6;
   if (field.round) { g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 3, 0, 7); g.stroke(); }
   else g.strokeRect(3, 3, S - 6, S - 6);
@@ -1147,15 +1209,53 @@ function follow(id) {
   setButtons();
 }
 
+// Director mode, off unless switched on: when a tractor fails, the camera goes to it,
+// holds with a slow turn while the banner fills in, then returns to the overview.
+// Touching the scene hands the camera straight back.
+const director = { on: false, id: null, started: 0, answered: 0, orbit: false };
+function startDirector(id) {
+  const view = tractors[id];
+  if (!director.on || !view || !view.pos) return;
+  Object.assign(director, { id, started: performance.now(), answered: 0, orbit: controls.autoRotate });
+  followId = id;
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0);
+  if (dir.lengthSq() < 1e-6) dir.set(0.4, 0, 1);
+  dir.normalize();
+  flyTo(view.pos.clone().addScaledVector(dir, 11).add(new THREE.Vector3(0, 6.5, 0)), view.pos.clone().setY(0.25), 2.4);
+  controls.autoRotateSpeed = 0.9;
+  controls.autoRotate = true;
+  setButtons();
+}
+function endDirector(returnToOverview) {
+  if (director.id === null) return;
+  director.id = null;
+  controls.autoRotate = director.orbit;
+  controls.autoRotateSpeed = 0.5;
+  if (returnToOverview) { followId = null; flyTo(overview.position, overview.target, 2.4); }
+  setButtons();
+}
+function updateDirector() {
+  if (director.id === null) return;
+  const now = performance.now(), since = now - director.started;
+  // "Filled in" means the AI Recovery agent has answered, or there is no AI agent to wait for.
+  const waiting = state && state.foreman.ai && state.foreman.ai.enabled && !(incident && incident.ai && !incident.ai.startsWith("reading"));
+  if (!waiting && !director.answered) director.answered = now;
+  const filled = director.answered && now - director.answered > 6000;     // six seconds to read it
+  if (!incident || incident.id !== director.id || (since > 7000 && filled) || since > 25000) endDirector(true);
+}
+for (const type of ["pointerdown", "wheel"]) canvas.addEventListener(type, () => endDirector(false), { passive: true });
+
 function setButtons() {
+  $("btn-director").classList.toggle("on", director.on);
   fleetKey = "";
   if (state) updateHud(state);
   $("btn-follow").classList.toggle("on", followId !== null);
   $("btn-orbit").classList.toggle("on", controls.autoRotate);
 }
 
-$("btn-overview").onclick = () => { followId = null; flyTo(overview.position, overview.target); setButtons(); };
+$("btn-overview").onclick = () => { endDirector(false); followId = null; flyTo(overview.position, overview.target); setButtons(); };
 $("btn-yard").onclick = () => {
+  endDirector(false);
   followId = null;
   if (yard) flyTo(yard.position.clone().add(new THREE.Vector3(26, 22, 44)), yard.position.clone());
   setButtons();
@@ -1168,6 +1268,7 @@ $("btn-follow").onclick = () => {
   follow(next);
 };
 $("btn-orbit").onclick = () => { controls.autoRotate = !controls.autoRotate; setButtons(); };
+$("btn-director").onclick = () => { director.on = !director.on; if (!director.on) endDirector(false); setButtons(); };
 $("card-close").onclick = () => { selectedId = null; followId = null; setButtons(); };
 
 const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
@@ -1237,6 +1338,7 @@ function applyState(next) {
   updateHud(next);
   updateIncident(next);
   drawIncident();
+  placePanels();
   $("clock").textContent = next.clock || "--:--";
   $("plan-no").textContent = next.foreman.plan_no ? `Plan ${next.foreman.plan_no}` : "";
   $("run-state").textContent = next.finished ? "Day complete" : next.running ? `Running ${next.clock_speed ?? next.speed}×` : "Paused";
@@ -1252,6 +1354,9 @@ const VERB = { till: "tilling", plant: "planting", mow: "mowing", spray: "sprayi
 const lastSeen = {};        // tractor id -> what it was doing at the last reading
 let incident = null;
 
+// "1 job(s)" from the server reads as "1 job"; "2 job(s)" as "2 jobs".
+const plural = (text) => String(text || "").replace(/(\d+) ([a-z]+)\(s\)/g, (_, n, word) => `${n} ${word}${n === "1" ? "" : "s"}`);
+
 function updateIncident(next) {
   const jobById = Object.fromEntries(next.foreman.jobs.map((j) => [j.id, j]));
   const story = next.foreman.explanation || {};
@@ -1263,7 +1368,8 @@ function updateIncident(next) {
       else if (before && before.status === "traveling") what += " on the road";
       // On a page opened mid-breakdown the time of the failure is not known.
       incident = { id: t.id, name: t.name, at: before ? next.now : -Infinity, what: before ? what + "." : `${t.name} is broken down.`,
-                   did: "Foreman is re-planning the rest of the day.", ai: "", back: null, hideAt: null };
+                   did: before ? "Foreman is re-planning the rest of the day." : "", ai: "", now: "", estimate: null, repair: null, back: null, hideAt: null };
+      if (before) startDirector(t.id);
     }
     const job = t.job ? jobById[t.job] : null;
     lastSeen[t.id] = { status: t.status, job: t.job, type: job ? job.type : null, pct: job ? job.pct : 0,
@@ -1277,22 +1383,52 @@ function updateIncident(next) {
   const sentence = (story.headline || "").split(/(?<=\.)\s+/).find((part) => part.includes(incident.name) && part.includes("went down"));
   if (sentence) {
     incident.what = sentence;
-    incident.did = `Foreman re-planned${story.ms != null ? ` in ${story.ms} ms` : ""}: ${story.summary || ""}`.trim();
+    incident.did = plural(`Foreman re-planned${story.ms != null ? ` in ${story.ms} ms` : ""}: ${story.summary || ""}`.trim());
   }
 
   // The AI Recovery agent's newest call about this tractor since it failed.
   const call = (next.foreman.reasoning || []).find((r) => r.agent === "AI Recovery agent" && r.at >= incident.at - 2
                                                          && String(r.input || "").startsWith(incident.name));
-  if (call && call.status === "thinking") incident.ai = "is reading the fault report.";
+  if (call && call.status === "thinking") incident.ai = "reading the fault report.";
   else if (call && call.status === "done" && call.answer) {
-    incident.ai = `${call.answer.severity} fault, about ${call.answer.downtime_min} min. ${call.applied || ""}`.trim();
-  } else if (call) incident.ai = "gave no usable answer. The rule-based plan stands.";
+    incident.failedAt = call.at;
+    incident.estimate = call.answer.downtime_min;
+    incident.ai = plural(`${call.answer.severity} fault, about ${call.answer.downtime_min} min. ${call.applied || ""}`.trim());
+    // Once its answer has been applied, say again where the day stands, from the plan in the state.
+    if (call.applied) {
+      const late = next.foreman.plan.filter((row) => row.late_min > 0 && (jobById[row.job] || {}).status !== "done").length;
+      const verdict = late === 0 ? "all deadlines are still met" : `${late} job${late === 1 ? "" : "s"} will finish late`;
+      incident.verdict = verdict;
+      incident.now = /held \d/.test(call.applied) ? `With the hold in place, ${verdict}.` : `After the estimate, ${verdict}.`;
+    }
+  } else if (call) incident.ai = "no usable answer. The rule-based plan stands.";
+
+  // If the tractor is not back by the estimate, the planner stops waiting. Say so, so the line above is not left stale.
+  if ((story.headline || "").includes(`${incident.name} is not back by the estimated time`)) incident.late = true;
+  if (incident.late && incident.ai) {
+    incident.ai += " It was not back by then, so its held work was moved.";
+    if (incident.verdict) incident.now = `With that work moved, ${incident.verdict}.`;
+  }
 
   if (tractor.status !== "broken" && !incident.hideAt) {
+    // Back in service: the real repair time beside the estimate. Measured from the state,
+    // from the minute it failed to the reading that first shows it running again.
     incident.back = `${incident.name} is back in service at ${next.clock}.`;
-    incident.hideAt = performance.now() + 20000;      // stays for 20 seconds, then clears
+    if (Number.isFinite(incident.failedAt ?? incident.at)) {
+      incident.repair = { actual: Math.round(next.now - (incident.failedAt ?? incident.at)), estimate: incident.estimate };
+    }
+    // The server's own record of estimate against actual is exact; use it when it has one for this fault.
+    const mine = incident;
+    fetch("/api/learning", { cache: "no-store" }).then((r) => r.json()).then((report) => {
+      const items = ((report.downtime_estimates || {}).items || []).filter((item) => item.tractor === mine.name);
+      const record = items[items.length - 1];
+      if (record && incident === mine && (mine.estimate == null || record.estimate_min === mine.estimate)) {
+        mine.repair = { actual: Math.round(record.actual_min), estimate: record.estimate_min };
+      }
+    }).catch(() => {});
+    incident.hideAt = performance.now() + 45000;      // stays for 45 seconds, then clears
   }
-  if (tractor.status === "broken") { incident.back = null; incident.hideAt = null; }
+  if (tractor.status === "broken") { incident.back = null; incident.repair = null; incident.hideAt = null; }
 }
 
 // The banner takes the space to the right of the readout; the tractor card moves below it.
@@ -1306,21 +1442,36 @@ window.addEventListener("resize", placePanels);
 function drawIncident() {
   const box = $("incident");
   if (incident && incident.hideAt && performance.now() > incident.hideAt) incident = null;
-  const key = incident ? JSON.stringify([incident.what, incident.did, incident.ai, incident.back]) : "";
+  const key = incident ? JSON.stringify([incident.what, incident.did, incident.ai, incident.now, incident.back, incident.repair]) : "";
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.style.display = incident ? "block" : "none";
-  placePanels();
-  if (!incident) return;
-  $("incident-what").textContent = `⚠ ${incident.back || incident.what}`;
-  $("incident-did").textContent = incident.did;
-  const ai = $("incident-ai");
-  ai.replaceChildren();
-  if (incident.ai) {
-    const who = document.createElement("b");
-    who.textContent = "AI Recovery agent ";
-    ai.append(who, incident.ai);
+  if (incident) {
+    $("incident-what").textContent = incident.back ? incident.back : `⚠ ${incident.what}`;
+    $("incident-did").textContent = incident.did;
+    const ai = $("incident-ai");
+    ai.replaceChildren();
+    if (incident.ai) {
+      const who = document.createElement("b");
+      who.textContent = "AI Recovery agent: ";
+      ai.append(who, incident.ai);
+    }
+    $("incident-now").textContent = incident.back ? "" : incident.now;
+    const repair = $("incident-repair");
+    repair.replaceChildren();
+    repair.classList.toggle("shown", !!incident.repair);
+    if (incident.repair) {
+      const cell = (label, value) => { const s = document.createElement("span"), b = document.createElement("b"); b.textContent = value; s.append(label, b); return s; };
+      const { actual, estimate } = incident.repair;
+      if (estimate != null) repair.append(cell("AI Recovery agent estimated", `${estimate} min`));
+      repair.append(cell("Repair really took", `${actual} min`));
+      if (estimate != null) {
+        const gap = estimate - actual;
+        repair.append(cell("Estimate was", gap === 0 ? "exact" : `${Math.abs(gap)} min ${gap > 0 ? "too long" : "too short"}`));
+      }
+    }
   }
+  placePanels();
 }
 
 // Day summary and fleet list, straight from the state's totals and tractor rows.
@@ -1698,6 +1849,7 @@ function frame() {
   updateTractors(dt, iconScale, time);
   updateRouteAnimation(Math.min(elapsed, 3));   // real time, so a fade still ends if the tab was in the background
   updateCard();
+  updateDirector();
   drawIncident();
   updateScaleBar(distance);
   $("scale-note").textContent = iconScale < 1.05
