@@ -30,7 +30,7 @@
   var POLL_MS = 30000;
   var HEIGHT = 240;
   var COLORS = {
-    line: "#f0ae4d", surface: "#19221e", grid: "#2b3a33", axis: "#9fb0a5", text: "#edf5ef"
+    line: "#dfe7e2", surface: "#19221e", grid: "#2b3a33", axis: "#9fb0a5", text: "#edf5ef"
   };
   var DEMO = {
     days: [
@@ -49,7 +49,7 @@
     ".ap-hero { font-size: clamp(18px, 2.4vw, 26px); font-weight: 700; margin: 0 0 2px; }",
     ".ap-sub { font-size: 13px; color: #9fb0a5; margin: 0 0 10px; }",
     ".ap-demo { display: inline-block; font-size: 11px; font-weight: 700; color: #111714;",
-    "  background: #f0ae4d; border-radius: 4px; padding: 1px 6px; margin-left: 8px; vertical-align: middle; }",
+    "  background: #dfe7e2; border-radius: 4px; padding: 1px 6px; margin-left: 8px; vertical-align: middle; }",
     ".ap-canvas-wrap { position: relative; }",
     ".ap canvas { display: block; width: 100%; }",
     ".ap-empty { height: 160px; display: flex; align-items: center; justify-content: center;",

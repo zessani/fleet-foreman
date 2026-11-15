@@ -121,8 +121,8 @@
     gap: 12px;
     padding: 12px 20px;
   }
-  .map-panel { position: relative; min-height: 600px; overflow: hidden; }
-  #farm-map { display: block; width: 100%; height: 100%; min-height: 600px; }
+  .map-panel { position: relative; min-height: 680px; overflow: hidden; }
+  #farm-map { display: block; width: 100%; height: 100%; min-height: 680px; }
   .legend {
     position: absolute;
     left: 12px;
@@ -153,7 +153,7 @@
   }
   .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); font-weight: 650; }
   .tab-body { padding: 12px; }
-  aside .tab-body { max-height: 620px; overflow-y: auto; }
+  aside .tab-body { max-height: 700px; overflow-y: auto; }
 
   .list { display: grid; gap: 8px; }
   .card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: #141c18; }
@@ -388,7 +388,7 @@
     let minY = Math.min(...ys), maxY = Math.max(...ys);
     if (minX === maxX) { minX -= 1; maxX += 1; }
     if (minY === maxY) { minY -= 1; maxY += 1; }
-    const padX = 110, padTop = 60, padBottom = 90;  // room for labels and the legend
+    const padX = 120, padTop = 50, padBottom = 80;  // room for labels and the legend
     const scale = Math.min((width - padX * 2) / (maxX - minX), (height - padTop - padBottom) / (maxY - minY));
     const offsetX = (width - (maxX - minX) * scale) / 2;
     const offsetY = padBottom + (height - padTop - padBottom - (maxY - minY) * scale) / 2;
@@ -477,20 +477,22 @@
           ctx.stroke();
         }
         // Labels sit outside the circle so a tractor in the field never covers them.
-        ctx.fillStyle = "#f2f7f3";
         ctx.font = "650 14px system-ui";
-        ctx.fillText(node.name || node.id, point.x, point.y - radius - 12);
+        const fieldLabel = node.name || node.id;
+        const nameWidth = ctx.measureText(fieldLabel).width;
+        ctx.fillStyle = "#141c18d9";  // backing, so a name stays readable over a road or a ring
+        ctx.fillRect(point.x - nameWidth / 2 - 4, point.y - radius - 26, nameWidth + 8, 19);
+        ctx.fillStyle = job ? "#f2f7f3" : "#a9b8ae";
+        ctx.fillText(fieldLabel, point.x, point.y - radius - 12);
         ctx.font = "13px system-ui";
-        let line = `${node.area_ha || "?"} ha, no job`;
+        let line = "";  // a field with no job today shows only its name
         if (job) {
           const allDone = fieldJobs.every(item => item.status === "done");
           line = allDone ? "Done" : `${TASK[job.type] || job.type} ${Math.round(progress)}%`;
           ctx.fillStyle = job.status === "held" ? ATTENTION : allDone ? "#f2f7f3" : "#c3d0c7";
           if (job.status === "held") line = `${TASK[job.type] || job.type}: no tractor`;
-        } else {
-          ctx.fillStyle = "#a9b8ae";
         }
-        ctx.fillText(line, point.x, point.y + radius + 21);
+        if (line) ctx.fillText(line, point.x, point.y + radius + 21);
       } else if (node.kind === "depot") {
         ctx.fillStyle = "#dfe7e2";
         ctx.fillRect(point.x - 9, point.y - 9, 18, 18);
@@ -870,9 +872,22 @@
 
   function renderScenario() {
     const menu = document.getElementById("scenario");
-    const index = [...menu.options].findIndex(option => option.value === state.scenario);
-    if (document.activeElement !== menu) menu.selectedIndex = index;
-    text("scenario-note", state.seed != null ? `Random farm, seed ${state.seed}` : "");
+    // A farm that is not one of the built-in entries (a random farm) gets its own line in
+    // the menu, so the menu never shows a farm that is not the one on screen.
+    let other = menu.querySelector("option[data-other]");
+    const builtIn = [...menu.options].some(option => !option.dataset.other && option.value === state.scenario);
+    if (!builtIn && !other) {
+      other = document.createElement("option");
+      other.dataset.other = "1";
+      menu.append(other);
+    }
+    if (other && builtIn) other.remove();
+    if (other && !builtIn) {
+      other.value = state.scenario || "";
+      other.textContent = state.seed != null ? `Random farm, seed ${state.seed}` : (state.farm?.name || "Other farm");
+    }
+    if (document.activeElement !== menu) menu.value = state.scenario || "";
+    text("scenario-note", "");
   }
 
   function renderState(nextState) {
@@ -1058,7 +1073,9 @@
   document.getElementById("priority-button").addEventListener("click", changePriority);
   document.getElementById("priority-job").addEventListener("change", renderEventControls);
   document.getElementById("speed").addEventListener("change", () => control(null));
-  document.getElementById("scenario").addEventListener("change", event => loadFarm("/api/scenario", { name: event.target.value }));
+  document.getElementById("scenario").addEventListener("change", event => {
+    if (!event.target.selectedOptions[0]?.dataset.other) loadFarm("/api/scenario", { name: event.target.value });
+  });
   document.getElementById("random-farm").addEventListener("click", () => loadFarm("/api/scenario/random", {}));
   document.getElementById("job-filter").addEventListener("change", () => { if (state) renderJobs(state.foreman || {}); });
   document.getElementById("jobs").addEventListener("click", event => {

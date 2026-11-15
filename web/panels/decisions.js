@@ -28,11 +28,11 @@
   const POLL_MS = 500;
   const LOG_LINES = 60;
   const AGENT_COLORS = {
-    "Orchestrator": "#f0ae4d", "Planner": "#7fb2ff", "Route finder": "#5ccfc0",
-    "Safety gate": "#67c587", "Recovery monitor": "#ef8d68",
-    "AI Recovery agent": "#c79bff", "AI Safety agent": "#c79bff",
+    "Orchestrator": "#dfe7e2", "Planner": "#dfe7e2", "Route finder": "#dfe7e2",
+    "Safety gate": "#dfe7e2", "Recovery monitor": "#dfe7e2",
+    "AI Recovery agent": "#f2f7f3", "AI Safety agent": "#f2f7f3",
   };
-  const AI_COLOR = "#c79bff";
+  const AI_COLOR = "#f2f7f3";
   const STATUS = {
     thinking: ["THINKING", "dp-st-think"], done: ["DONE", "dp-st-done"],
     fallback: ["FELL BACK TO RULES", "dp-st-fail"],
@@ -44,7 +44,7 @@
   const CSS = `
 .dp-host { container-type: inline-size; }
 .dp { --dp-panel: #19221e; --dp-panel2: #202c26; --dp-line: #34453c; --dp-text: #edf5ef;
-  --dp-muted: #9fb0a5; --dp-accent: #f0ae4d; --dp-good: #67c587; --dp-bad: #ef6d68;
+  --dp-muted: #9fb0a5; --dp-accent: #dfe7e2; --dp-good: #dfe7e2; --dp-bad: #ef6d68;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--dp-text);
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px; box-sizing: border-box; }
@@ -74,7 +74,7 @@
   font-size: clamp(15px, 1.5cqi, 21px); line-height: 1.35; }
 .dp-badge { display: inline-block; border-radius: 6px; padding: 6px 14px; font-weight: 800;
   font-size: clamp(20px, 2.4cqi, 34px); letter-spacing: 0.03em; margin-bottom: 6px; }
-.dp-pass { background: #1f3a2a; color: var(--dp-good); border: 1px solid var(--dp-good); }
+.dp-pass { background: #26332c; color: var(--dp-good); border: 1px solid var(--dp-good); }
 .dp-fail { background: #40201f; color: var(--dp-bad); border: 1px solid var(--dp-bad); }
 .dp-none { background: var(--dp-panel2); color: var(--dp-muted); border: 1px solid var(--dp-line); }
 .dp-line { font-size: clamp(14px, 1.4cqi, 19px); color: var(--dp-muted); margin: 0 0 10px; }
@@ -92,7 +92,7 @@
 .dp-time { color: var(--dp-muted); font-variant-numeric: tabular-nums; }
 .dp-agent { font-weight: 700; }
 .dp-banner { border: 2px solid var(--dp-accent); border-radius: 8px; padding: 10px 14px;
-  margin: 0 0 12px; background: #3a2e18; animation: dp-pulse 1.6s ease-in-out infinite; }
+  margin: 0 0 12px; background: #26332c; animation: dp-pulse 1.6s ease-in-out infinite; }
 .dp-banner-text { font-size: clamp(22px, 2.8cqi, 36px); font-weight: 800; color: var(--dp-accent); }
 .dp-banner-sub { font-size: clamp(14px, 1.4cqi, 19px); color: var(--dp-text); margin-top: 4px; }
 @keyframes dp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
