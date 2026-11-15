@@ -1,6 +1,6 @@
 # web/panels
 
-Owner: Vishwa
+Owner: Vishva
 
 Dashboard panels: numbers panel, "Why?" panel and accuracy chart. Same rules as `web/` (plain JavaScript, no build step, no CDN, poll `GET /api/state`).
 

@@ -1,6 +1,6 @@
 # docs
 
-Owner: Vishwa
+Owner: Vishva
 
 Deck, architecture diagram and README assets.
 

@@ -1,6 +1,6 @@
 # tools
 
-Owner: Vishwa
+Owner: Vishva
 
 Scripts for the farm files and results: farm checker, random farm maker, and exports of the event log and baseline comparison.
 
