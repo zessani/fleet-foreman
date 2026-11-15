@@ -26,8 +26,11 @@ class Run:
         self.sim = Simulation(farm, road_map, use_truth)
         # Simulation remains the deterministic clock/job ledger. In live mode its
         # SimTractors are not stepped; AgOpenWeb adapters execute the work.
-        self.tractors = adapters or self.sim.tractors
-        self.live = adapters is not None
+        # A partial map is allowed: tractors with an adapter run live, the rest
+        # stay simulated behind the same three calls, on the same clock.
+        self.live_ids: set[str] = set(adapters or {})
+        self.tractors = {**self.sim.tractors, **(adapters or {})}
+        self.live = bool(self.live_ids)
         self._last_live: dict[str, dict] = {}
         self.watch = StatusWatch()
         self.plan: Plan | None = None
@@ -50,21 +53,14 @@ class Run:
 
     def world(self) -> WorldState:
         """The current state for planning. Tractors taken out of service are unavailable."""
-        if not self.live:
-            world = self.sim.world_state()
-        else:
-            statuses = self.statuses()
-            world = WorldState(
-                self.now,
-                {
-                    tractor_id: TractorState(
-                        tractor_id, status.get("node") or self.farm.tractors[tractor_id].node,
-                        self.now, status["fuel"], status["mounted"],
-                        status["state"] != "broken", status.get("job")
-                    )
-                    for tractor_id, status in statuses.items()
-                },
-                {job_id: replace(state) for job_id, state in self.sim.jobs.items()},
+        world = self.sim.world_state()
+        for tractor_id in sorted(self.live_ids):
+            # A live tractor is described by its telemetry, not by its idle shadow.
+            status = self.tractors[tractor_id].status()
+            world.tractors[tractor_id] = TractorState(
+                tractor_id, status.get("node") or self.farm.tractors[tractor_id].node,
+                self.now, status["fuel"], status["mounted"],
+                status["state"] != "broken", status.get("job")
             )
         for tractor_id in self.watch.down:
             world.tractors[tractor_id].available = False
@@ -115,53 +111,66 @@ class Run:
         return row
 
     def advance(self, minutes: float) -> None:
-        """Advance deterministic simulation or sample live AgOpenWeb execution."""
+        """Step the simulated tractors by simulated time, then sample the live ones."""
         if not self.live:
             self.sim.advance(minutes)
             return
-        self.sim.now += minutes
-        for tractor_id, status in self.statuses().items():
-            shadow = self.sim.tractors[tractor_id]
-            previous = self._last_live.get(tractor_id)
-            state_name = status["state"]
-            bucket = {"working": "work", "traveling": "travel", "servicing": "service",
-                      "waiting": "wait"}.get(state_name)
-            if bucket:
-                shadow.minutes[bucket] += minutes
-                if hasattr(self.tractors[tractor_id], "minutes"):
-                    self.tractors[tractor_id].minutes[bucket] += minutes
-            elif self.sim.open_jobs():
-                shadow.minutes["idle"] += minutes
-                if hasattr(self.tractors[tractor_id], "minutes"):
-                    self.tractors[tractor_id].minutes["idle"] += minutes
-            if previous:
-                shadow.km += ((status["x"] - previous["x"]) ** 2
-                              + (status["y"] - previous["y"]) ** 2) ** 0.5
-            shadow.x, shadow.y = status["x"], status["y"]
-            shadow.heading, shadow.fuel = status["heading"], status["fuel"]
-            shadow.mounted = status["mounted"]
-            job_id = status.get("job")
-            if job_id in self.sim.jobs:
-                job_state = self.sim.jobs[job_id]
-                area = self.farm.jobs[job_id].area_ha
-                remaining = max(0.0, area * (1.0 - status.get("pct", 0.0) / 100.0))
-                if job_state.started_at is None and remaining < area:
-                    job_state.started_at = self.now
-                    self.sim.events.append({"t": self.now, "type": "job_started",
-                                            "tractor": tractor_id, "job": job_id})
-                job_state.remaining_ha = min(job_state.remaining_ha, remaining)
-                job_state.tractor = tractor_id
-                if status.get("pct", 0.0) >= 99.9 and job_state.status != "done":
-                    job_state.status, job_state.done_at = "done", self.now
-                    self.sim.events.append({"t": self.now, "type": "job_done",
-                                            "tractor": tractor_id, "job": job_id})
-                elif job_state.status != "done":
-                    job_state.status = "active"
-            self._last_live[tractor_id] = status
+        self._advance_simulated(minutes)
+        for tractor_id in sorted(self.live_ids):
+            self._sample_live(tractor_id, self.tractors[tractor_id].status(), minutes)
+
+    def _advance_simulated(self, minutes: float) -> None:
+        """Move the clock and the simulated tractors. Live shadows are not stepped,
+        because AgOpenWeb moves those tractors."""
+        shadows = {i: self.sim.tractors.pop(i) for i in self.live_ids}
+        try:
+            self.sim.advance(minutes)
+        finally:
+            self.sim.tractors.update(shadows)
+
+    def _sample_live(self, tractor_id: str, status: dict, minutes: float) -> None:
+        """Copy one live tractor's telemetry into the simulation ledger."""
+        shadow = self.sim.tractors[tractor_id]
+        previous = self._last_live.get(tractor_id)
+        state_name = status["state"]
+        bucket = {"working": "work", "traveling": "travel", "servicing": "service",
+                  "waiting": "wait"}.get(state_name)
+        if bucket:
+            shadow.minutes[bucket] += minutes
+            if hasattr(self.tractors[tractor_id], "minutes"):
+                self.tractors[tractor_id].minutes[bucket] += minutes
+        elif self.sim.open_jobs():
+            shadow.minutes["idle"] += minutes
+            if hasattr(self.tractors[tractor_id], "minutes"):
+                self.tractors[tractor_id].minutes["idle"] += minutes
+        if previous:
+            shadow.km += ((status["x"] - previous["x"]) ** 2
+                          + (status["y"] - previous["y"]) ** 2) ** 0.5
+        shadow.x, shadow.y = status["x"], status["y"]
+        shadow.heading, shadow.fuel = status["heading"], status["fuel"]
+        shadow.mounted = status["mounted"]
+        job_id = status.get("job")
+        if job_id in self.sim.jobs:
+            job_state = self.sim.jobs[job_id]
+            area = self.farm.jobs[job_id].area_ha
+            remaining = max(0.0, area * (1.0 - status.get("pct", 0.0) / 100.0))
+            if job_state.started_at is None and remaining < area:
+                job_state.started_at = self.now
+                self.sim.events.append({"t": self.now, "type": "job_started",
+                                        "tractor": tractor_id, "job": job_id})
+            job_state.remaining_ha = min(job_state.remaining_ha, remaining)
+            job_state.tractor = tractor_id
+            if status.get("pct", 0.0) >= 99.9 and job_state.status != "done":
+                job_state.status, job_state.done_at = "done", self.now
+                self.sim.events.append({"t": self.now, "type": "job_done",
+                                        "tractor": tractor_id, "job": job_id})
+            elif job_state.status != "done":
+                job_state.status = "active"
+        self._last_live[tractor_id] = status
 
     def break_down(self, tractor_id: str, silent: bool = False) -> None:
         tractor = self.tractors[tractor_id]
-        if self.live:
+        if tractor_id in self.live_ids:
             job_id = tractor.status().get("job")
             if job_id in self.sim.jobs and self.sim.jobs[job_id].status != "done":
                 self.sim.jobs[job_id].status = "pending"
@@ -174,9 +183,8 @@ class Run:
         self.tractors[tractor_id].repair()
 
     def close(self) -> None:
-        if self.live:
-            for tractor in self.tractors.values():
-                tractor.close()
+        for tractor_id in self.live_ids:
+            self.tractors[tractor_id].close()
 
     def _job_row(self, job_id: str) -> dict:
         job, state = self.farm.jobs[job_id], self.sim.jobs[job_id]

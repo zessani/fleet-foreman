@@ -249,15 +249,17 @@ class AgOpenWebTractorAdapter:
 
 def build_agopenweb_adapters(farm: Any, urls: dict[str, str], origin_lat: float,
                              origin_lon: float) -> dict[str, AgOpenWebTractorAdapter]:
-    missing = sorted(set(farm.tractors) - set(urls))
-    if missing:
-        raise ValueError("AgOpenWeb live mode needs one URL per tractor; missing " + ", ".join(missing))
-    endpoints = [urls[tractor_id] for tractor_id in farm.tractors]
+    # A partial map is fine: tractors left out stay on the simulator.
+    unknown = sorted(set(urls) - set(farm.tractors))
+    if unknown:
+        raise ValueError("AgOpenWeb URL given for unknown tractor " + ", ".join(unknown)
+                         + "; farm tractors are " + ", ".join(sorted(farm.tractors)))
+    endpoints = list(urls.values())
     if len(set(endpoints)) != len(endpoints):
         raise ValueError("each tractor needs a different AgOpenWeb host; one host controls one tractor")
     return {
         tractor_id: AgOpenWebTractorAdapter(
             farm.tractors[tractor_id], farm, urls[tractor_id], origin_lat, origin_lon
         )
-        for tractor_id in sorted(farm.tractors)
+        for tractor_id in sorted(urls)
     }

@@ -741,6 +741,14 @@ Verified by running it today
   module, IMU, GPS, each with its own port. The repo also ships virtual
   modules under `Simulators/AgOpenWeb.VirtualModules` that act as tractor hardware.
 
+Partial live map: `FOREMAN_AGOPENWEB_URLS="T1=ws://127.0.0.1:5174/ws"` runs
+only T1 in AgOpenWeb. Every tractor left out stays on `SimTractor`, in the same
+run and on the same clock. The simulated tractors are stepped by simulated time;
+the live one is sampled from its telemetry each step. An id that is not in the
+farm is an error. A dropped connection reads as `broken` and is re-planned onto
+the simulated tractors. The baseline world is always fully simulated. This
+supersedes `bridge/README.md` where it says every tractor needs a URL.
+
 Not verified
 - Whether two hosts can run on one machine without port clashes.
 - The exact bytes needed to drive a tractor from outside. Read the two files
