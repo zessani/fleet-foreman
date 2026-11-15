@@ -58,9 +58,9 @@ Done when: we can break any tractor and the plan repairs with no human.
 - [x] Plain explanation of each plan change
 
 ### Ahmed
-- [ ] AgOpenGPS link driving one tractor
-- [ ] "Break this tractor" button
-- [ ] Breakdown test cases
+- [x] AgOpenGPS link driving one tractor
+- [x] "Break this tractor" button
+- [x] Breakdown test cases
 
 ### Vishva
 - [ ] Random farm maker

@@ -63,6 +63,8 @@
   button { cursor: pointer; }
   button:hover { border-color: var(--accent); }
   button.primary { color: #17120a; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  button.danger { color: #ffc9c6; border-color: #8b4541; background: #442321; }
+  button.danger:hover { border-color: var(--danger); }
   button:disabled { opacity: .55; cursor: wait; }
   .clock { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 700; }
   .run-state { color: var(--muted); min-width: 54px; }
@@ -179,9 +181,12 @@
   <select id="speed">
     <option value="1">1×</option>
     <option value="4" selected>4×</option>
-    <option value="10">10×</option>
-    <option value="30">30×</option>
+    <option value="16">16×</option>
+    <option value="60">60×</option>
   </select>
+  <label for="break-tractor">Tractor</label>
+  <select id="break-tractor" aria-label="Tractor to break"></select>
+  <button id="break-button" class="danger">Break this tractor</button>
   <span id="control-error" class="error"></span>
   <span class="clock" id="clock">--:--</span>
   <span class="run-state" id="run-state">Paused</span>
@@ -513,6 +518,25 @@
     if (!(foreman.jobs || []).length) jobContainer.innerHTML = '<div class="empty">No job data</div>';
   }
 
+  function renderBreakdownControl() {
+    const select = document.getElementById("break-tractor");
+    const button = document.getElementById("break-button");
+    const tractors = state?.foreman?.tractors || [];
+    const selected = select.value;
+    select.textContent = "";
+    for (const tractor of tractors) {
+      const option = document.createElement("option");
+      option.value = tractor.id;
+      option.textContent = `${tractor.name || tractor.id} (${tractor.status || "unknown"})`;
+      option.disabled = tractor.status === "broken";
+      select.append(option);
+    }
+    const preferred = tractors.find(tractor => tractor.id === selected && tractor.status !== "broken")
+      || tractors.find(tractor => tractor.status !== "broken");
+    if (preferred) select.value = preferred.id;
+    button.disabled = !preferred;
+  }
+
   function renderState(nextState) {
     state = nextState;
     const farm = state.farm || {};
@@ -526,6 +550,7 @@
       speed.value = String(state.speed);
     }
     renderLists();
+    renderBreakdownControl();
   }
 
   async function poll() {
@@ -562,9 +587,33 @@
     }
   }
 
+  async function breakTractor() {
+    const button = document.getElementById("break-button");
+    const tractor = document.getElementById("break-tractor").value;
+    if (!tractor) return;
+    button.disabled = true;
+    text("control-error", "");
+    try {
+      const response = await fetch("/api/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "breakdown", tractor }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (!result.ok) throw new Error(result.error || "breakdown was rejected");
+      await poll();
+    } catch (error) {
+      text("control-error", `Breakdown failed: ${error.message}`);
+    } finally {
+      renderBreakdownControl();
+    }
+  }
+
   document.querySelectorAll("button[data-action]").forEach(button => {
     button.addEventListener("click", () => control(button.dataset.action));
   });
+  document.getElementById("break-button").addEventListener("click", breakTractor);
   new ResizeObserver(resizeCanvas).observe(canvas);
   window.addEventListener("resize", resizeCanvas);
 
