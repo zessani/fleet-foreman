@@ -449,12 +449,144 @@
     ctx.setLineDash([]);
   }
 
+  let fieldScale = 1;  // circles shrink on a farm whose fields sit close together
+
   function fieldRadius(node) {
-    return 16 + Math.min(12, Math.sqrt(Number(node.area_ha) || 1));
+    return (16 + Math.min(12, Math.sqrt(Number(node.area_ha) || 1))) * fieldScale;
   }
 
-  function drawNodes(farm, foreman, project) {
-    ctx.textAlign = "center";
+  function setFieldScale(farm, project) {
+    const points = (farm.nodes || []).filter(node => node.kind === "field").map(project);
+    let nearest = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        nearest = Math.min(nearest, Math.hypot(points[i].x - points[j].x, points[i].y - points[j].y));
+      }
+    }
+    fieldScale = Math.max(0.5, Math.min(1, nearest / 95));
+  }
+
+  // ---- labels that keep clear of each other ---------------------------------
+
+  function overlaps(a, b) {
+    return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  }
+
+  // Try the places around a point in order and take the first that covers nothing already
+  // on the map. If every place covers something, take the one that covers the least.
+  function placeBox(width, height, anchor, radius, taken, order) {
+    const gap = 7;
+    const side = radius * 0.72;
+    const spots = {
+      top: { x: anchor.x - width / 2, y: anchor.y - radius - gap - height },
+      bottom: { x: anchor.x - width / 2, y: anchor.y + radius + gap },
+      right: { x: anchor.x + radius + gap, y: anchor.y - height / 2 },
+      left: { x: anchor.x - radius - gap - width, y: anchor.y - height / 2 },
+      topRight: { x: anchor.x + side + gap, y: anchor.y - side - gap - height },
+      bottomRight: { x: anchor.x + side + gap, y: anchor.y + side + gap },
+      topLeft: { x: anchor.x - side - gap - width, y: anchor.y - side - gap - height },
+      bottomLeft: { x: anchor.x - side - gap - width, y: anchor.y + side + gap },
+    };
+    let best = null;
+    let bestHits = Infinity;
+    // Close to the point first; if every close place is taken, one step further out.
+    const tries = [...order.map(name => [name, 0]), ...order.map(name => [name, 20]), ...order.map(name => [name, 42])];
+    for (const [name, push] of tries) {
+      const spot = spots[name];
+      const dx = Math.sign(spot.x + width / 2 - anchor.x) * push * (name === "top" || name === "bottom" ? 0 : 1);
+      const dy = Math.sign(spot.y + height / 2 - anchor.y) * push * (name === "left" || name === "right" ? 0 : 1);
+      const box = { x: spot.x + dx, y: spot.y + dy, w: width, h: height };
+      const outside = box.x < 2 || box.y < 2 || box.x + width > canvas.clientWidth - 2
+        || box.y + height > canvas.clientHeight - 2;
+      const hits = taken.filter(other => overlaps(box, other)).length + (outside ? 3 : 0);
+      if (hits < bestHits) { best = box; bestHits = hits; }
+      if (!hits) break;
+    }
+    taken.push(best);
+    return best;
+  }
+
+  function drawLabel(box, lines) {
+    ctx.fillStyle = "#141c18e6";
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.textAlign = "left";
+    let y = box.y + 15;
+    for (const line of lines) {
+      ctx.font = line.font;
+      ctx.fillStyle = line.color;
+      ctx.fillText(line.text, box.x + 5, y);
+      y += 17;
+    }
+  }
+
+  function labelSize(lines) {
+    let width = 0;
+    for (const line of lines) {
+      ctx.font = line.font;
+      width = Math.max(width, ctx.measureText(line.text).width);
+    }
+    return { w: width + 10, h: 17 * lines.length + 5 };
+  }
+
+  function fieldLines(node, fieldJobs, workers) {
+    const job = currentJob(fieldJobs);
+    const lines = [{ text: node.name || node.id, font: "650 14px system-ui", color: job ? "#f2f7f3" : "#a9b8ae" }];
+    if (!job) return lines;  // a field with no job today shows only its name
+    const task = TASK[job.type] || job.type;
+    const allDone = fieldJobs.every(item => item.status === "done");
+    const progress = Math.max(0, Math.min(100, Number(job.pct) || 0));
+    if (job.status === "held") lines.push({ text: `${task}: no tractor`, font: "13px system-ui", color: ATTENTION });
+    else if (allDone) lines.push({ text: "Done", font: "13px system-ui", color: "#f2f7f3" });
+    else {
+      // The tractor working here is named on the field's own label, so it needs no label of its own.
+      const who = workers.length ? ` · ${workers.join(", ")}` : "";
+      lines.push({ text: `${task} ${Math.round(progress)}%${who}`, font: "13px system-ui", color: "#c3d0c7" });
+    }
+    return lines;
+  }
+
+  // Everything a label must not cover: the field circles, the yard and the legend.
+  function fixedShapes(farm, project) {
+    const taken = [];
+    for (const node of farm.nodes || []) {
+      const point = project(node);
+      const reach = node.kind === "field" ? fieldRadius(node) + 8 : node.kind === "depot" ? 11 : 0;
+      if (reach) taken.push({ x: point.x - reach, y: point.y - reach, w: reach * 2, h: reach * 2 });
+    }
+    const legend = document.getElementById("legend");
+    taken.push({ x: legend.offsetLeft, y: legend.offsetTop, w: legend.offsetWidth, h: legend.offsetHeight });
+    return taken;
+  }
+
+  const SIDES = { top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0], topLeft: [-0.7, -0.7],
+                  topRight: [0.7, -0.7], bottomLeft: [-0.7, 0.7], bottomRight: [0.7, 0.7] };
+
+  // A name goes on the side that points away from the nearest other field, so it is
+  // clear which circle it belongs to. Above the circle is preferred when nothing is near.
+  function sidesAwayFromNeighbour(field, fields) {
+    let nearest = null;
+    let distance = Infinity;
+    for (const other of fields) {
+      if (other === field) continue;
+      const d = Math.hypot(other.point.x - field.point.x, other.point.y - field.point.y);
+      if (d < distance) { nearest = other; distance = d; }
+    }
+    const names = ["top", "bottom", "left", "right", "topLeft", "topRight", "bottomLeft", "bottomRight"];
+    if (!nearest || distance > 105) return names;
+    const away = [(field.point.x - nearest.point.x) / distance, (field.point.y - nearest.point.y) / distance];
+    const score = name => SIDES[name][0] * away[0] + SIDES[name][1] * away[1];
+    return [...names].sort((a, b) => score(b) - score(a));
+  }
+
+  // The field a tractor is working in right now, or null.
+  function workingIn(tractor, foreman) {
+    if (tractor.status !== "working") return null;
+    const job = (foreman.jobs || []).find(item => item.id === tractor.job);
+    return job ? job.field : null;
+  }
+
+  function drawNodes(farm, foreman, project, taken) {
+    const fields = [];
     for (const node of farm.nodes || []) {
       const point = project(node);
       if (node.kind === "field") {
@@ -476,30 +608,15 @@
           ctx.lineWidth = 5;
           ctx.stroke();
         }
-        // Labels sit outside the circle so a tractor in the field never covers them.
-        ctx.font = "650 14px system-ui";
-        const fieldLabel = node.name || node.id;
-        const nameWidth = ctx.measureText(fieldLabel).width;
-        ctx.fillStyle = "#141c18d9";  // backing, so a name stays readable over a road or a ring
-        ctx.fillRect(point.x - nameWidth / 2 - 4, point.y - radius - 26, nameWidth + 8, 19);
-        ctx.fillStyle = job ? "#f2f7f3" : "#a9b8ae";
-        ctx.fillText(fieldLabel, point.x, point.y - radius - 12);
-        ctx.font = "13px system-ui";
-        let line = "";  // a field with no job today shows only its name
-        if (job) {
-          const allDone = fieldJobs.every(item => item.status === "done");
-          line = allDone ? "Done" : `${TASK[job.type] || job.type} ${Math.round(progress)}%`;
-          ctx.fillStyle = job.status === "held" ? ATTENTION : allDone ? "#f2f7f3" : "#c3d0c7";
-          if (job.status === "held") line = `${TASK[job.type] || job.type}: no tractor`;
-        }
-        if (line) ctx.fillText(line, point.x, point.y + radius + 21);
+        const workers = (foreman.tractors || []).filter(tractor => workingIn(tractor, foreman) === node.id)
+          .map(tractor => tractor.name || tractor.id);
+        fields.push({ point, radius: radius + 7, lines: fieldLines(node, fieldJobs, workers) });
       } else if (node.kind === "depot") {
         ctx.fillStyle = "#dfe7e2";
         ctx.fillRect(point.x - 9, point.y - 9, 18, 18);
-        ctx.font = "650 14px system-ui";
-        ctx.textAlign = "right";  // to the left, because tractors at the yard are labelled on the right
-        ctx.fillText(node.name || "Yard", point.x - 16, point.y + 5);
-        ctx.textAlign = "center";
+        const lines = [{ text: node.name || "Yard", font: "650 14px system-ui", color: "#f2f7f3" }];
+        const size = labelSize(lines);
+        drawLabel(placeBox(size.w, size.h, point, 11, taken, ["left", "bottom", "top", "bottomLeft", "topLeft", "right"]), lines);
       } else {
         ctx.beginPath();
         ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
@@ -507,38 +624,57 @@
         ctx.fill();
       }
     }
+    // Names go on after every circle is drawn, each in the first free place around its field.
+    // The most crowded fields choose first, because they have the fewest free places.
+    const crowd = field => fields.filter(other => Math.hypot(other.point.x - field.point.x,
+                                                             other.point.y - field.point.y) < 130).length;
+    fields.sort((a, b) => crowd(b) - crowd(a));
+    for (const field of fields) {
+      const size = labelSize(field.lines);
+      const box = placeBox(size.w, size.h, field.point, field.radius, taken, sidesAwayFromNeighbour(field, fields));
+      drawLabel(box, field.lines);
+    }
   }
 
+  let lastFrame = 0;
+
   function smoothTractors(tractors) {
+    // Ease by elapsed time, not by frame count, so a slow or background tab still shows
+    // every tractor where the state says it is.
+    const now = performance.now();
+    const ease = 1 - Math.exp(-Math.min(1000, now - lastFrame) / 110);
+    lastFrame = now;
     return (tractors || []).map(tractor => {
       const targetX = Number(tractor.x) || 0;
       const targetY = Number(tractor.y) || 0;
       const current = displayedPositions.get(tractor.id) || { x: targetX, y: targetY };
-      current.x += (targetX - current.x) * 0.14;
-      current.y += (targetY - current.y) * 0.14;
+      current.x += (targetX - current.x) * ease;
+      current.y += (targetY - current.y) * ease;
       displayedPositions.set(tractor.id, current);
       return { ...tractor, x: current.x, y: current.y };
     }).filter(tractor => Number.isFinite(tractor.x) && Number.isFinite(tractor.y));
   }
 
-  function drawTractors(tractors, project) {
-    const placed = [];
+  function drawTractors(tractors, foreman, project, taken) {
+    const groups = [];  // tractors standing in the same spot share one label
     for (const tractor of tractors) {
       const point = project(tractor);
-      // Tractors in the same spot fan out so every one of them and its name stays visible.
-      const sharing = placed.filter(other => Math.hypot(other.x - point.x, other.y - point.y) < 18).length;
-      placed.push({ x: point.x, y: point.y });
-      const x = point.x + sharing * 20;
-      const y = point.y;
+      let group = groups.find(other => Math.hypot(other.x - point.x, other.y - point.y) < 18);
+      if (!group) {
+        group = { x: point.x, y: point.y, members: [] };
+        groups.push(group);
+      }
+      const x = group.x + group.members.length * 20;  // fan out so every marker stays visible
+      const y = group.y;
+      group.members.push(tractor);
       const down = tractor.status === "broken";
-      if (down) {  // a red ring and cross, so a breakdown does not depend on the tractor's colour
+      if (down) {  // a red ring, so a breakdown does not depend on the tractor's colour
         ctx.beginPath();
         ctx.arc(x, y, 19, 0, Math.PI * 2);
         ctx.lineWidth = 3;
         ctx.strokeStyle = ATTENTION;
         ctx.stroke();
       }
-
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(-(Number(tractor.heading) || 0) * Math.PI / 180);
@@ -554,16 +690,19 @@
       ctx.strokeStyle = "#0f1512";
       ctx.stroke();
       ctx.restore();
-
-      ctx.font = "650 14px system-ui";
-      ctx.textAlign = "left";
-      const label = `${tractor.name || tractor.id} · ${statusWord(tractor.status).toLowerCase()}`;
-      const labelX = point.x + 38 + sharing * 20;  // beside the field circle, clear of both field labels
-      const labelY = y + 5 - sharing * 22;
-      ctx.fillStyle = "#0f1512e0";
-      ctx.fillRect(labelX - 5, labelY - 15, ctx.measureText(label).width + 10, 20);
-      ctx.fillStyle = down ? ATTENTION : "#f2f7f3";
-      ctx.fillText(label, labelX, labelY);
+    }
+    for (const group of groups) {
+      // A tractor at work is already named on its field's label.
+      const lines = group.members.filter(tractor => !workingIn(tractor, foreman)).map(tractor => ({
+        text: `${tractor.name || tractor.id} · ${statusWord(tractor.status).toLowerCase()}`,
+        font: "650 14px system-ui", color: tractor.status === "broken" ? ATTENTION : "#f2f7f3",
+      }));
+      if (!lines.length) continue;
+      const size = labelSize(lines);
+      const centre = { x: group.x + (group.members.length - 1) * 10, y: group.y };
+      const box = placeBox(size.w, size.h, centre, 16 + (group.members.length - 1) * 10, taken,
+        ["right", "topRight", "bottomRight", "top", "bottom", "left", "topLeft", "bottomLeft"]);
+      drawLabel(box, lines);
     }
   }
 
@@ -587,8 +726,10 @@
     const project = makeTransform(farm);
     drawRoads(farm, nodes, project);
     drawRoutes(foreman, nodes, project);
-    drawNodes(farm, foreman, project);
-    drawTractors(smoothTractors(foreman.tractors), project);
+    setFieldScale(farm, project);
+    const taken = fixedShapes(farm, project);
+    drawNodes(farm, foreman, project, taken);
+    drawTractors(smoothTractors(foreman.tractors), foreman, project, taken);
   }
 
   function renderLegend(foreman) {
