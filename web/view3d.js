@@ -24,8 +24,9 @@ const U = 100;                 // scene units per km (1 unit = 10 m)
 const M = 0.1;                 // scene units per metre
 const MAX_ICON_SCALE = 26;     // largest enlargement of a tractor, at the overview
 const MAX_IMPLEMENT_SCALE = 9; // implements are enlarged less, so a wide boom does not cover a field
-const ICON_DISTANCE = 24;      // camera distance per 1x of enlargement
+const ICON_DISTANCE = 16;      // camera distance per 1x of enlargement (true size at the follow distance)
 const TRACTOR_GLB = "assets/tractor.glb";
+const DUST = false;
 // Used only until the server sends farm.implements: width in metres read from the id.
 const FALLBACK_WIDTH = { spray: 18, mow: 4, till: 6, plant: 6 };
 const TYPE_BY_PREFIX = { sprayer: "spray", mower: "mow", disc: "till", planter: "plant" };
@@ -825,7 +826,7 @@ function follow(id) {
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0);
   if (dir.lengthSq() < 1e-6) dir.set(0.4, 0, 1);
   dir.normalize();
-  const position = view.pos.clone().addScaledVector(dir, 5.2).add(new THREE.Vector3(0, 2.6, 0));
+  const position = view.pos.clone().addScaledVector(dir, 8.5).add(new THREE.Vector3(0, 5.5, 0));
   flyTo(position, view.pos.clone().add(new THREE.Vector3(0, 0.25, 0)), 1.4);
   setButtons();
 }
@@ -1015,7 +1016,8 @@ function updateTractors(dt, iconScale, time) {
 
     // Dust behind a disc, mist behind a sprayer, only while it is really working and moving.
     const type = (view.spec || {}).type, moved = before.distanceTo(view.pos);
-    const emit = working && (type === "till" || type === "spray") && moved > 1e-4;
+    // Off: the clock runs at 60 times real speed or more, so a dust trail turns into a row of blobs.
+    const emit = DUST && working && (type === "till" || type === "spray") && moved > 1e-4;
     view.puffs.visible = emit || view.puffData.some((p) => p.life > 0);
     if (view.puffs.visible) {
       view.puffs.material.color.set(type === "spray" ? 0xdfeaf2 : 0xd3b990);
@@ -1117,7 +1119,7 @@ function frame() {
     controls.target.lerpVectors(fly.fromT, fly.toT, k);
     if (fly.t >= 1) fly = null;
   } else if (followId && tractors[followId] && tractors[followId].pos) {
-    const delta = tmp.copy(tractors[followId].pos).setY(0.25).sub(controls.target).multiplyScalar(ease(Math.min(elapsed, 3), 6));
+    const delta = tmp.copy(tractors[followId].pos).setY(0.25).sub(controls.target);   // locked on: at one simulated minute per second a tractor covers about 150 m a second
     controls.target.add(delta);
     camera.position.add(delta);
   }
