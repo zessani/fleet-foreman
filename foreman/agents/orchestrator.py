@@ -99,8 +99,9 @@ class Orchestrator(Agent):
                                  default=0.0),
         })
         names = ", ".join(self.tractor_name(t) for t in sorted(cycle.plan.routes)) or "no tractors"
+        stayed = story["unchanged"] + story["retimed"]
         self.say("dispatch", f"Plan {run.plan_no} sent to {names}. {story['moved']} moved, "
-                             f"{story['unchanged']} stayed put. Event to dispatch: {ms:.1f} ms.",
+                             f"{stayed} stayed with their tractor. Event to dispatch: {ms:.1f} ms.",
                  plan_no=run.plan_no, ms=round(ms, 2))
 
     def _stand_down(self, cycle: Cycle) -> None:
