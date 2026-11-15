@@ -47,73 +47,67 @@
   .error { color: #ffc0bd; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 
-  /* Operator header: where, when, and is it live */
+  /* Header: the farm, the time, and the few controls that are used all the time */
   header {
     display: flex;
     align-items: center;
-    gap: 20px;
+    flex-wrap: wrap;
+    gap: 10px 20px;
     padding: 12px 20px;
     border-bottom: 1px solid var(--line);
   }
   .clock-block { margin-left: auto; display: flex; align-items: baseline; gap: 12px; }
   .clock { font-size: 34px; font-weight: 750; font-variant-numeric: tabular-nums; }
   .run-state { color: var(--muted); font-size: 16px; }
-  .connection { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+  .connection { display: flex; align-items: center; gap: 8px; color: var(--attention); font-weight: 650; }
+  .connection[hidden] { display: none; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--attention); }
-  .connected .dot { background: var(--fill); }
+  .controls { display: flex; align-items: center; gap: 8px; position: relative; }
+  a.button {
+    color: var(--text); background: var(--panel-2); border: 1px solid #4a5f54; border-radius: 6px;
+    padding: 7px 12px; text-decoration: none;
+  }
+  a.button:hover { border-color: var(--text); }
+  /* Rarely used controls sit behind one button */
+  .menu > summary {
+    list-style: none; cursor: pointer; padding: 7px 12px; border: 1px solid #4a5f54;
+    border-radius: 6px; background: var(--panel-2);
+  }
+  .menu > summary::-webkit-details-marker { display: none; }
+  .menu[open] > summary { border-color: var(--text); }
+  .menu-body {
+    position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: min(520px, 92vw);
+    display: grid; gap: 12px; padding: 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 12px 32px #000a;
+  }
+  .menu-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .menu-row > label { width: 58px; color: var(--muted); }
+  .menu-row select { flex: 1; min-width: 0; }
+  .control-error { padding: 0 20px; color: #ffc0bd; }
+  .control-error:empty { display: none; }
+  .control-error:not(:empty) { padding-top: 8px; }
 
-  /* Simulation controls: set apart so nobody takes them for farm controls */
-  .sim {
+  /* One row that says whether the day is on plan, with three figures */
+  .status {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 18px;
-    padding: 8px 20px;
-    border-bottom: 1px solid var(--line);
-    background: repeating-linear-gradient(135deg, #141b17 0 14px, #171f1a 14px 28px);
-    font-size: 14px;
+    gap: 14px 28px;
+    margin: 12px 20px 0;
+    padding: 14px 18px;
   }
-  .sim-tag {
-    padding: 3px 8px;
-    border: 1px dashed var(--muted);
-    border-radius: 4px;
-    color: var(--muted);
-    font-size: 12px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-  }
-  .sim-group { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-  .sim-group > label { color: var(--muted); }
-  .sim select { max-width: 250px; }
-  .sim-note { color: var(--muted); }
-
-  /* The six numbers an operator checks first */
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 10px;
-    padding: 12px 20px 0;
-  }
-  .tile { padding: 10px 14px; }
-  .tile-label { color: var(--muted); font-size: 13px; }
-  .tile-value { font-size: 30px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.15; }
-  .tile-value small { font-size: 16px; font-weight: 500; color: var(--muted); }
-  .tile-sub { color: var(--muted); font-size: 13px; min-height: 17px; }
-  .tile.bad { border-color: var(--attention); }
-  .tile.bad .tile-value { color: var(--attention); }
-
-  .banner {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin: 10px 20px 0;
-    padding: 10px 14px;
-    font-size: 18px;
-    font-weight: 650;
-  }
-  .banner.empty { font-weight: 400; color: var(--muted); font-size: 16px; }
-  .banner button { margin-left: auto; white-space: nowrap; font-size: 14px; font-weight: 400; }
-  .banner.offline { border-color: var(--attention); }
+  .status.attention { border-color: var(--attention); }
+  .status-main { flex: 1; min-width: 280px; }
+  .status-word { font-size: 26px; font-weight: 750; line-height: 1.2; }
+  .status.attention .status-word { color: var(--attention); }
+  .status-last { margin-top: 4px; color: var(--muted); font-size: 16px; }
+  .status-last:empty { display: none; }
+  .figures { display: flex; gap: 26px; }
+  .figure { display: flex; flex-direction: column; }
+  .figure b { font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .figure span { color: var(--muted); font-size: 14px; }
+  .figure.bad b { color: var(--attention); }
 
   main {
     display: grid;
@@ -162,8 +156,8 @@
   .card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .card-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-line { margin-top: 4px; color: var(--muted); font-size: 14px; }
-  .status { font-size: 14px; white-space: nowrap; color: var(--muted); }
-  .status.attention { color: var(--attention); font-weight: 650; }
+  .chip { font-size: 14px; white-space: nowrap; color: var(--muted); }
+  .chip.attention { color: var(--attention); font-weight: 650; }
   .who { display: inline-block; width: 11px; height: 11px; margin-right: 7px; border-radius: 50%; }
   .bar { height: 6px; margin-top: 8px; overflow: hidden; background: #2c3a32; border-radius: 3px; }
   .bar > span { display: block; height: 100%; background: var(--fill); }
@@ -172,16 +166,20 @@
   .priority-row select { min-width: 0; }
   .event-result { min-height: 18px; margin-top: 6px; color: var(--muted); font-size: 14px; }
 
-  .detail { margin: 0 20px 20px; }
+  .detail { margin: 0 20px 20px; padding: 0; }
+  .detail > summary { padding: 12px 16px; cursor: pointer; color: var(--muted); font-size: 16px; }
+  .detail[open] > summary { color: var(--text); font-weight: 650; border-bottom: 1px solid var(--line); }
   .detail .tab-body { padding: 14px; }
+  .tech { display: flex; flex-wrap: wrap; gap: 8px 32px; padding: 12px 16px 4px; }
+  .tech div { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 14px; }
+  .tech b { color: var(--text); font-size: 18px; }
+  .tech b.bad { color: var(--attention); }
 
   @media (max-width: 1100px) {
     main { grid-template-columns: 1fr; }
-    .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 600px) {
-    .tiles { grid-template-columns: 1fr 1fr; }
-    header { flex-wrap: wrap; }
+    .figures { gap: 16px; }
     .map-panel, #farm-map { min-height: 420px; }
   }
 </style>
@@ -189,65 +187,67 @@
 <body>
 <header>
   <h1 id="farm-name">Foreman</h1>
+  <div id="connection" class="connection" hidden>
+    <span class="dot"></span><span id="connection-text"></span>
+  </div>
   <div class="clock-block">
     <span class="clock" id="clock">--:--</span>
-    <span class="run-state" id="run-state">Connecting</span>
+    <span class="run-state" id="run-state"></span>
   </div>
-  <div id="connection" class="connection">
-    <span class="dot"></span><span id="connection-text">Connecting</span>
-  </div>
-</header>
-
-<section class="sim" aria-label="Simulation controls">
-  <span class="sim-tag">Simulation</span>
-  <div class="sim-group">
+  <div class="controls">
     <button class="primary" data-action="start">Start</button>
     <button data-action="pause">Pause</button>
-    <button data-action="reset">Reset</button>
-    <label for="speed">Speed</label>
-    <select id="speed">
-      <option value="1">1×</option>
-      <option value="4" selected>4×</option>
-      <option value="16">16×</option>
-      <option value="60">60×</option>
+    <select id="speed" aria-label="Speed">
+      <option value="1">1× speed</option>
+      <option value="4" selected>4× speed</option>
+      <option value="16">16× speed</option>
+      <option value="60">60× speed</option>
     </select>
+    <a class="button" href="view3d.html">3D view</a>
+    <details class="menu" id="more-menu">
+      <summary>More</summary>
+      <div class="menu-body">
+        <div class="menu-row">
+          <label for="scenario">Farm</label>
+          <select id="scenario" aria-label="Farm to load">
+            <option value="sample_farm">Sample farm: 3 tractors, 10 jobs, Cedar fails at 09:30</option>
+            <option value="large_farm">Large farm: Vishva's 5 tractors and 25 jobs</option>
+          </select>
+          <button id="random-farm">Random farm</button>
+          <span id="scenario-note" hidden></span>
+        </div>
+        <div class="menu-row">
+          <label for="break-tractor">Tractor</label>
+          <select id="break-tractor" aria-label="Tractor to break"></select>
+          <button id="break-button">Break down</button>
+          <button id="repair-button">Repair</button>
+        </div>
+        <div class="menu-row">
+          <label for="road-select">Road</label>
+          <select id="road-select" aria-label="Road to block or open"></select>
+          <button id="road-button">Close road</button>
+        </div>
+        <div class="menu-row">
+          <button data-action="reset">Start the day again</button>
+        </div>
+      </div>
+    </details>
   </div>
-  <div class="sim-group">
-    <label for="scenario">Farm</label>
-    <select id="scenario" aria-label="Farm to load">
-      <option value="sample_farm">Sample farm: 3 tractors, 10 jobs, Cedar fails at 09:30</option>
-      <option value="large_farm">Large farm: Vishva's 5 tractors and 25 jobs</option>
-    </select>
-    <button id="random-farm">Random farm</button>
-    <span id="scenario-note" class="sim-note"></span>
-  </div>
-  <div class="sim-group">
-    <label for="break-tractor">Tractor</label>
-    <select id="break-tractor" aria-label="Tractor to break"></select>
-    <button id="break-button">Break down</button>
-    <button id="repair-button">Repair</button>
-  </div>
-  <div class="sim-group">
-    <label for="road-select">Road</label>
-    <select id="road-select" aria-label="Road to block or open"></select>
-    <button id="road-button">Block road</button>
-  </div>
-  <span id="control-error" class="error" role="status"></span>
-</section>
+</header>
+<div id="control-error" class="control-error" role="status"></div>
 
-<section class="tiles" aria-label="Farm status">
-  <div class="panel tile" id="tile-jobs"><div class="tile-label">Jobs done</div><div class="tile-value" id="summary-jobs">–</div><div class="tile-sub" id="summary-jobs-sub"></div></div>
-  <div class="panel tile" id="tile-late"><div class="tile-label">Late jobs</div><div class="tile-value" id="summary-late">–</div><div class="tile-sub" id="summary-late-sub"></div></div>
-  <div class="panel tile" id="tile-held"><div class="tile-label">Jobs with no tractor</div><div class="tile-value" id="summary-held">–</div><div class="tile-sub" id="summary-held-sub"></div></div>
-  <div class="panel tile" id="tile-down"><div class="tile-label">Tractors out of service</div><div class="tile-value" id="summary-down">–</div><div class="tile-sub" id="summary-down-sub"></div></div>
-  <div class="panel tile" id="tile-safety"><div class="tile-label">Safety gate</div><div class="tile-value" id="summary-safety">–</div><div class="tile-sub" id="summary-safety-sub"></div></div>
-  <div class="panel tile" id="tile-replan"><div class="tile-label">Last re-plan took</div><div class="tile-value" id="summary-replan">–</div><div class="tile-sub" id="summary-plan"></div></div>
+<section class="panel status" id="banner" aria-label="Farm status">
+  <div class="status-main">
+    <div class="status-word" id="status-word">Connecting to Foreman.</div>
+    <div class="status-last"><span id="explanation-headline"></span> <span id="explanation-summary"></span></div>
+  </div>
+  <div class="figures">
+    <div class="figure" id="tile-jobs"><b id="summary-jobs">–</b><span>jobs finished</span></div>
+    <div class="figure" id="tile-late"><b id="summary-late">–</b><span>running late</span></div>
+    <div class="figure" id="tile-down"><b id="summary-down">–</b><span>tractors broken down</span></div>
+  </div>
+  <button id="banner-detail">Details</button>
 </section>
-
-<div class="panel banner empty" id="banner">
-  <span id="explanation-headline">Connecting to Foreman.</span>
-  <button id="banner-detail" hidden>What changed</button>
-</div>
 
 <main>
   <section class="panel map-panel" aria-label="Farm map">
@@ -271,7 +271,6 @@
           <option value="open">Not finished</option>
           <option value="trouble">Late or without a tractor</option>
         </select>
-        <span class="muted">Click a job to see why its tractor was chosen.</span>
       </div>
       <div id="jobs" class="list"><div class="muted">Waiting for jobs.</div></div>
       <div class="priority-row">
@@ -289,18 +288,24 @@
   </aside>
 </main>
 
-<section class="panel detail" data-tabs="detail" id="detail">
+<details class="panel detail" data-tabs="detail" id="detail">
+  <summary>How Foreman decided</summary>
+  <div class="tech">
+    <div><span>Safety checks</span><b id="summary-safety">–</b><span id="summary-safety-sub"></span></div>
+    <div><span>Latest plan</span><b id="summary-replan">–</b><span id="summary-plan"></span></div>
+    <div><span>Jobs waiting for a tractor</span><b id="summary-held">–</b></div>
+  </div>
   <div class="tabs" role="tablist">
-    <button role="tab" data-tab="plan" aria-selected="true">Plan and safety</button>
-    <button role="tab" data-tab="compare" aria-selected="false">Foreman against first come, first served</button>
+    <button role="tab" data-tab="plan" aria-selected="true">What changed and why</button>
+    <button role="tab" data-tab="compare" aria-selected="false">Compared with first come, first served</button>
     <button role="tab" data-tab="why" aria-selected="false">Why this tractor?</button>
-    <button role="tab" data-tab="accuracy" aria-selected="false">Estimate accuracy</button>
+    <button role="tab" data-tab="accuracy" aria-selected="false">Time estimates</button>
   </div>
   <div class="tab-body" data-panel="plan"><div id="decisions-panel"></div></div>
   <div class="tab-body" data-panel="compare" hidden><div id="numbers-panel"></div></div>
   <div class="tab-body" data-panel="why" hidden><div id="why-panel"></div></div>
   <div class="tab-body" data-panel="accuracy" hidden><div id="accuracy-panel"></div></div>
-</section>
+</details>
 
 <script>
   const canvas = document.getElementById("farm-map");
@@ -311,8 +316,8 @@
   const displayedPositions = new Map();
 
   // The same six words are used on the map, in the lists and in the 3D view.
-  const STATUS = { working: "Working", traveling: "Traveling", servicing: "Servicing",
-                   waiting: "Waiting", idle: "Idle", broken: "Out of service" };
+  const STATUS = { working: "Working", traveling: "On the road", servicing: "At the yard",
+                   waiting: "Waiting", idle: "Free", broken: "Broken down" };
   const ATTENTION = "#ef6d68";  // the only status colour: something needs attention
   const FILL = "#dfe7e2";       // progress and finished work
   const DOING = { spray: "Spraying", mow: "Mowing", till: "Tilling", plant: "Planting" };
@@ -340,7 +345,7 @@
 
   function setConnected(connected, message) {
     online = connected;
-    document.getElementById("connection").classList.toggle("connected", connected);
+    document.getElementById("connection").hidden = connected;  // only shown when something is wrong
     text("connection-text", message);
   }
 
@@ -535,7 +540,7 @@
     const task = TASK[job.type] || job.type;
     const allDone = fieldJobs.every(item => item.status === "done");
     const progress = Math.max(0, Math.min(100, Number(job.pct) || 0));
-    if (job.status === "held") lines.push({ text: `${task}: no tractor`, font: "13px system-ui", color: ATTENTION });
+    if (job.status === "held") lines.push({ text: `${task}: waiting for a tractor`, font: "13px system-ui", color: ATTENTION });
     else if (allDone) lines.push({ text: "Done", font: "13px system-ui", color: "#f2f7f3" });
     else {
       // The tractor working here is named on the field's own label, so it needs no label of its own.
@@ -779,7 +784,7 @@
   }
 
   function statusChip(label, attention) {
-    return element("span", attention ? "status attention" : "status", label);
+    return element("span", attention ? "chip attention" : "chip", label);
   }
 
   function tractorDot(tractorId) {
@@ -803,9 +808,9 @@
     if (tractor.status === "working" && job) return `${what} ${where}, ${Math.round(Number(job.pct) || 0)}% done`;
     if (tractor.status === "traveling" && job) return `Driving to ${where}`;
     if (tractor.status === "waiting" && job) return `Waiting at ${where}`;
-    if (tractor.status === "servicing") return "At the yard: implement swap or refuel";
-    if (tractor.status === "broken") return job ? `Stopped. ${TASK[job.type] || job.type} ${where} was moved or held` : "Stopped";
-    return "No task";
+    if (tractor.status === "servicing") return "Changing implement or refuelling";
+    if (tractor.status === "broken") return "Stopped. Foreman has moved its work";
+    return "Nothing to do right now";
   }
 
   function renderTractors(foreman) {
@@ -834,7 +839,7 @@
   function jobState(job, planItem) {
     const late = planItem && Number(planItem.late_min) > 0.5;
     if (job.status === "done") return { label: "Done", attention: false };
-    if (job.status === "held") return { label: "No tractor", attention: true };
+    if (job.status === "held") return { label: "Waiting for a tractor", attention: true };
     if (late) return { label: `Will be ${Math.round(planItem.late_min)} min late`, attention: true };
     if (job.status === "active") return { label: "In progress", attention: false };
     return { label: "Not started", attention: false };
@@ -875,78 +880,82 @@
 
   // ---- status tiles and banner ------------------------------------------
 
-  function setTile(id, tone) {
-    document.getElementById(id).className = `panel tile ${tone || ""}`;
+  function plural(count, one, many) {
+    return `${count} ${count === 1 ? one : many}`;
   }
 
-  function renderSummary(foreman) {
+  // The first thing on the page: is the day on plan, and if not, what needs the farmer.
+  function renderStatus(foreman) {
     const totals = foreman.totals || {};
     const jobs = foreman.jobs || [];
     const tractors = foreman.tractors || [];
     const done = totals.jobs_done ?? 0;
-    const onTime = totals.on_time ?? 0;
-
-    const jobsValue = document.getElementById("summary-jobs");
-    jobsValue.textContent = `${done} `;
-    jobsValue.append(element("small", "", `of ${jobs.length}`));
-    text("summary-jobs-sub", `${onTime} finished on time`);
-
     const open = new Set(jobs.filter(job => job.status !== "done").map(job => job.id));
     const plannedLate = (foreman.plan || []).filter(item => open.has(item.job) && Number(item.late_min) > 0.5).length;
-    const finishedLate = Math.max(0, done - onTime);
-    text("summary-late", finishedLate + plannedLate);
-    text("summary-late-sub", `${finishedLate} finished late, ${plannedLate} will be late`);
-    setTile("tile-late", finishedLate + plannedLate ? "bad" : "");
-
+    const late = Math.max(0, done - (totals.on_time ?? 0)) + plannedLate;
     const held = jobs.filter(job => job.status === "held").length;
-    text("summary-held", held);
-    text("summary-held-sub", held ? "Held until a tractor can take them" : "Every open job has a tractor");
-    setTile("tile-held", held ? "bad" : "");
-
     const down = tractors.filter(tractor => tractor.status === "broken");
-    const downValue = document.getElementById("summary-down");
-    downValue.textContent = `${down.length} `;
-    downValue.append(element("small", "", `of ${tractors.length}`));
-    text("summary-down-sub", down.map(tractor => tractor.name || tractor.id).join(", "));
-    setTile("tile-down", down.length ? "bad" : "");
+    const safetyFailed = foreman.safety?.passed === false;
 
+    const needs = [];
+    if (down.length) {
+      const names = down.map(tractor => tractor.name || tractor.id).join(" and ");
+      needs.push(`${names} ${down.length === 1 ? "is" : "are"} broken down`);
+    }
+    if (late) needs.push(`${plural(late, "job is", "jobs are")} running late`);
+    if (held) needs.push(`${plural(held, "job is", "jobs are")} waiting for a tractor`);
+    if (safetyFailed) needs.push("the latest plan failed a safety check and was not sent");
+
+    let word = "Everything is on plan.";
+    if (needs.length) word = `Needs attention: ${needs.join(", ")}.`;
+    else if (state.finished) word = "The day is finished. Everything went to plan.";
+    else if (!state.running && !(state.now > 0)) word = "The plan for today is ready.";
+    text("status-word", word);
+    document.getElementById("banner").className = `panel status ${needs.length ? "attention" : ""}`;
+
+    // What Foreman did last, in its own words. The first plan of the day needs no note.
+    const explanation = foreman.explanation || {};
+    const first = (foreman.plan_no ?? 0) <= 1;
+    text("explanation-headline", first ? "" : explanation.headline || "");
+    const did = [];
+    if (explanation.moved) did.push(`Foreman moved ${plural(explanation.moved, "job", "jobs")} to another tractor.`);
+    if (!first && !late && !held) did.push("Every job is still on time.");
+    text("explanation-summary", first ? "" : did.join(" "));
+
+    const jobsValue = document.getElementById("summary-jobs");
+    jobsValue.textContent = `${done} of ${jobs.length}`;
+    text("summary-late", late);
+    text("summary-down", down.length);
+    document.getElementById("tile-late").className = `figure ${late ? "bad" : ""}`;
+    document.getElementById("tile-down").className = `figure ${down.length ? "bad" : ""}`;
+
+    // The technical numbers, one click away.
     const safety = foreman.safety || {};
     const checks = safety.checks || [];
-    text("summary-safety", safety.passed == null ? "–" : safety.passed ? "Passed" : "Failed");
-    text("summary-safety-sub", safety.passed == null ? "No plan checked yet"
-      : `${checks.filter(check => check.passed).length} of ${checks.length} checks on plan ${foreman.plan_no ?? ""}`);
-    setTile("tile-safety", safety.passed === false ? "bad" : "");
-
-    const replanMs = foreman.explanation?.ms;
-    const replanValue = document.getElementById("summary-replan");
-    replanValue.textContent = replanMs == null ? "–" : `${Number(replanMs).toFixed(1)} `;
-    if (replanMs != null) replanValue.append(element("small", "", "ms"));
-    text("summary-plan", foreman.plan_no ? `Plan ${foreman.plan_no}, with no person involved` : "No plan yet");
-  }
-
-  function renderExplanation(foreman) {
-    const headline = foreman.explanation?.headline;
-    const banner = document.getElementById("banner");
-    banner.classList.remove("offline");
-    banner.classList.toggle("empty", !headline);
-    text("explanation-headline", headline || "No plan yet. Press Start to run the day.");
-    document.getElementById("banner-detail").hidden = !headline;
+    const safetyValue = document.getElementById("summary-safety");
+    safetyValue.textContent = safety.passed == null ? "not run yet" : safety.passed ? "passed" : "failed";
+    safetyValue.className = safetyFailed ? "bad" : "";
+    text("summary-safety-sub", safety.passed == null ? ""
+      : `${checks.filter(check => check.passed).length} of ${checks.length} checks`);
+    const replanMs = explanation.ms;
+    text("summary-replan", replanMs == null ? "none yet" : `made in ${Number(replanMs).toFixed(1)} ms`);
+    text("summary-plan", foreman.plan_no ? `plan ${foreman.plan_no} today, with no person involved` : "");
+    text("summary-held", held);
   }
 
   // ---- simulation controls ----------------------------------------------
 
   function renderRunState() {
     const thinking = state.foreman?.ai?.thinking;
-    let label = "Paused";
+    let label = state.now > 0 ? "Paused" : "Not started";
     if (state.finished) label = "Day finished";
-    else if (state.running) {
-      label = thinking ? "Running at 1× while an AI agent answers" : `Running at ${state.clock_speed ?? state.speed}×`;
-    }
+    else if (state.running) label = thinking ? "Slowed while an AI agent answers" : "";
     text("run-state", label);
     const start = document.querySelector('button[data-action="start"]');
     const pause = document.querySelector('button[data-action="pause"]');
     start.disabled = Boolean(state.running || state.finished);
-    start.title = state.finished ? "The day is over. Press Reset to run it again." : "";
+    start.title = state.finished ? "The day is over. Use More, then Start the day again." : "";
+    start.textContent = state.now > 0 ? "Resume" : "Start";
     pause.disabled = !state.running;
   }
 
@@ -994,7 +1003,7 @@
       label: `${nodeNames.get(a) || a} to ${nodeNames.get(b) || b}${blocked.has(edgeKey(a, b)) ? " (closed)" : ""}`,
     })));
     const roadButton = document.getElementById("road-button");
-    roadButton.textContent = blocked.has(roadSelect.value) ? "Open road" : "Block road";
+    roadButton.textContent = blocked.has(roadSelect.value) ? "Open road" : "Close road";
     roadButton.disabled = !roadSelect.value;
 
     const jobSelect = document.getElementById("priority-job");
@@ -1028,14 +1037,14 @@
       other.textContent = state.seed != null ? `Random farm, seed ${state.seed}` : (state.farm?.name || "Other farm");
     }
     if (document.activeElement !== menu) menu.value = state.scenario || "";
-    text("scenario-note", "");
+    text("scenario-note", state.seed != null ? `Random farm, seed ${state.seed}` : "");
   }
 
   function renderState(nextState) {
     state = nextState;
     const farm = state.farm || {};
     const foreman = state.foreman || {};
-    text("farm-name", farm.name || "Foreman");
+    text("farm-name", (farm.name || "Foreman").replace(/\s*\(random, seed \d+\)/, ""));
     text("clock", state.clock || "--:--");
     const speed = document.getElementById("speed");
     if (state.speed != null && document.activeElement !== speed
@@ -1049,21 +1058,19 @@
     renderJobs(foreman);
     renderBreakdownControl();
     renderEventControls();
-    renderExplanation(foreman);
-    renderSummary(foreman);
+    renderStatus(foreman);
   }
 
   function showOffline() {
     setConnected(false, "No connection");
-    text("run-state", "Not connected");
-    const banner = document.getElementById("banner");
-    banner.classList.add("offline");
-    banner.classList.remove("empty");
-    text("explanation-headline", state
-      ? "Lost the connection to Foreman. The page shows the last state it received."
+    text("run-state", "");
+    document.getElementById("banner").className = "panel status attention";
+    text("status-word", state
+      ? "Lost the connection to Foreman. This is the last state the page received."
       : "Cannot reach Foreman. Start it with: python -m foreman.server");
-    document.getElementById("banner-detail").hidden = true;
-    document.querySelectorAll(".sim button, .sim select, .priority-row button").forEach(control => { control.disabled = true; });
+    text("explanation-headline", "");
+    text("explanation-summary", "");
+    document.querySelectorAll(".controls button, .controls select, .priority-row button").forEach(control => { control.disabled = true; });
   }
 
   async function poll() {
@@ -1073,8 +1080,8 @@
       const response = await fetch("/api/state", { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const nextState = await response.json();
-      if (!online) document.querySelectorAll(".sim button, .sim select").forEach(control => { control.disabled = false; });
-      setConnected(true, nextState.execution === "agopenweb" ? "Live, tractors in AgOpenWeb" : "Live, simulated tractors");
+      if (!online) document.querySelectorAll(".controls button, .controls select").forEach(control => { control.disabled = false; });
+      setConnected(true, "");
       renderState(nextState);
     } catch (error) {
       showOffline();
@@ -1196,9 +1203,15 @@
     }
   }
 
+  function openDetail(tab) {
+    document.getElementById("detail").open = true;
+    selectTab("detail", tab);
+    document.getElementById("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function showWhy(jobId) {
     if (!window.WhyPanel) return;
-    selectTab("detail", "why");
+    openDetail("why");
     window.WhyPanel.show(jobId);
     document.getElementById("detail").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1223,9 +1236,12 @@
     const row = event.target.closest(".job-row");
     if (row) showWhy(row.dataset.job);
   });
-  document.getElementById("banner-detail").addEventListener("click", () => {
-    selectTab("detail", "plan");
-    document.getElementById("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("banner-detail").addEventListener("click", () => openDetail("plan"));
+  document.getElementById("detail").addEventListener("toggle", () => window.dispatchEvent(new Event("resize")));
+  // The More menu closes when a click lands anywhere else, or after a farm is loaded.
+  document.addEventListener("click", event => {
+    const menu = document.getElementById("more-menu");
+    if (menu.open && !menu.contains(event.target)) menu.open = false;
   });
   new ResizeObserver(resizeCanvas).observe(canvas);
 
