@@ -120,7 +120,7 @@ The model never assigns jobs and nothing waits on it.
 | Route finder | No | Routes between fields, stops tractors sharing a field | `foreman/nav` RoadMap, field conflict checker |
 | Safety gate | No | Passes or rejects every plan. Replaces human approval | Rule verifier (`safety.py`, nine checks, does not import the planner) |
 | Recovery monitor | No | Watches tractors, spots a failure, starts the re-plan, records the incident | Tractor status feed reader (`watch.py`) |
-| AI Recovery agent | Yes | Reads a broken tractor's fault report. Returns severity, expected downtime in minutes, a reason and a one-line lesson | Read-only: `tractor_status`, `jobs_at_risk`, `past_lessons` |
+| AI Recovery agent | Yes | Reads a broken tractor's fault report. Returns severity, expected downtime in minutes, `out_for_day` (true when the tractor will not work again today), a reason and a one-line lesson | Read-only: `tractor_status`, `jobs_at_risk`, `past_lessons` |
 | AI Safety agent | Yes | Reviews a plan the safety gate already passed. Returns a list of concerns, each `warn`, `hold_job` or `request_replan` | Read-only: `plan_summary`, `tractor_history`, `recent_log`, `past_lessons` |
 
 Log lines carry the role name in the `agent` key (the key name is kept for
@@ -174,10 +174,22 @@ reported fault, or a tractor that says it is working but makes no progress for
 
 **How answers change the plan**
 - An expected downtime goes to `planner.plan_with_return`. It scores moving the
-  work now and waiting for the tractor, both in the same world, and holds the
-  work for the tractor only if waiting is cheaper (by more than `WAIT_MARGIN`,
-  10 minutes). If the tractor is not back 10 minutes after the estimate, the
-  held work is moved.
+  work now and waiting for the tractor, both in the same world. A job is held
+  for the tractor only if waiting is cheaper (by more than `WAIT_MARGIN`,
+  10 minutes) and, in the waiting schedule, the job and every job that depends
+  on it still finish at least `HOLD_DEADLINE_MARGIN_MIN` (30 minutes) before
+  their deadlines. A job that fails the second test is moved now, even if
+  others are held. If the tractor is not back 10 minutes after the estimate,
+  the held work is moved.
+- "Out for the day" (`out_for_day: true`, or an estimate that reaches past the
+  end of the working day) holds nothing and sets no timer. The rule-based
+  re-plan that already moved the work stands, and the log says so ("Cedar is
+  out for the day. Its work stays with the other tractors."). A repair later
+  that day still goes through the normal `repaired` re-plan.
+- The real outcome of every estimate is saved as one lesson: the real repair
+  time when the tractor comes back, a missed estimate when it runs out, and at
+  the end of the day either "not repaired that day" or, for an out-for-the-day
+  answer, that the answer proved right.
 - `request_replan` with the one caution `spread_dependent_jobs` makes the
   planner add a cost (`CHAIN_COST`) for keeping a job and the job that depends
   on it on one tractor.

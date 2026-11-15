@@ -4,7 +4,9 @@ The order is always: the rule-based result is acted on first, then the model's
 answer is applied when it arrives. The model never assigns a job. Its answers
 only add caution, which the planner and the safety gate then work with:
 - AI Recovery agent: an expected downtime. The planner compares waiting for the
-  tractor with moving its work, and holds the work only if waiting is cheaper.
+  tractor with moving its work, and holds the work only if waiting is cheaper and
+  still leaves room before the deadlines. "Out for the day" holds nothing: the
+  work the rule-based re-plan already moved stays moved.
 - AI Safety agent: concerns about a plan the safety gate already passed. It can
   warn, hold one job for a while, or ask for one re-plan with a named caution.
 """
@@ -98,23 +100,33 @@ class AiDesk:
         day, run, answer = self.day, self.day.foreman, call.answer
         name = day.farm.tractors[tractor_id].name
         minutes = int(answer["downtime_min"])
+        back_at = fault.get("at", day.now) + minutes
+        back_clock = clock(day.farm.day_start_min, back_at)
+        # An estimate that ends after the working day means the same as "out for the day".
+        out_for_day = bool(answer.get("out_for_day")) or back_at >= day.farm.horizon_min
         fault["estimate_min"] = minutes
+        fault["out_for_day"] = out_for_day
         day.memory.add_lesson({
             "tractor": name, "report": fault.get("report", "")[:160],
-            "severity": answer["severity"], "downtime_min": minutes, "lesson": answer["lesson"],
+            "severity": answer["severity"], "downtime_min": minutes, "out_for_day": out_for_day,
+            "lesson": answer["lesson"],
         })
         actual = fault.get("true_downtime")
         if actual is not None:
             day.memory.estimates.append({"tractor": name, "estimate_min": minutes,
                                          "actual_min": actual, "gap_min": abs(minutes - actual)})
-        back_at = fault.get("at", day.now) + minutes
-        back_clock = clock(day.farm.day_start_min, back_at)
+        estimate_text = "out for the day" if out_for_day else f"about {minutes} min"
         self._log(RECOVERY, "ai_diagnosis",
-                  f"{name}: {answer['severity']}, about {minutes} min. {answer['reason']}",
-                  tractor=tractor_id, downtime_min=minutes)
+                  f"{name}: {answer['severity']}, {estimate_text}. {answer['reason']}",
+                  tractor=tractor_id, downtime_min=minutes, out_for_day=out_for_day)
 
         if tractor_id not in run.watch.down:
             call.applied = f"Saved the lesson. {name} was already back in service."
+        elif out_for_day:
+            # Nothing to wait for: no hold, no expiry timer, no re-plan. The rule-based
+            # re-plan after the breakdown already moved the work, and that plan stands.
+            run.returning.pop(tractor_id, None)
+            call.applied = f"{name} is out for the day. Its work stays with the other tractors."
         elif back_at <= day.now + 1.0:
             call.applied = "Saved the lesson. The estimated time has passed, so the work stays moved."
         else:
@@ -242,6 +254,7 @@ class AiDesk:
             tractor_id=tractor_id, tractor_name=farm.tractors[tractor_id].name,
             report=fault["report"], clock=clock(farm.day_start_min, day.now),
             plan_no=run.plan_no, now=day.now,
+            day_ends_in_min=max(0.0, farm.horizon_min - fault.get("at", day.now)),
             tractor_status={row["id"]: {key: row[key] for key in
                                         ("name", "status", "job", "fuel_pct", "mounted")}
                             for row in run.block()["tractors"]},

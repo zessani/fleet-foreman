@@ -33,10 +33,15 @@ def fault_sample(index: int) -> dict:
     return dict(FAULTS[index % len(FAULTS)])
 
 
-def out_all_day_report() -> str:
-    """The sample report for a fault that is not repaired today.
+# The report for the scripted breakdown of the demo day. That breakdown has no repair
+# time, so the simulator keeps the tractor out for the rest of the day, and the report
+# says so plainly: no field repair can fix it today. It is kept apart from FAULTS
+# because the texts in FAULTS are matched against lessons saved on earlier days.
+OUT_ALL_DAY_REPORT = ("Transmission failure: the tractor will not move in any gear and the gearbox "
+                      "grinds. The dealer says the gearbox has to come out in their workshop. "
+                      "Nothing can be done in the field today.")
 
-    A scripted breakdown with no report keeps the tractor out for the rest of the day,
-    so this is the report that matches what the simulator does.
-    """
-    return next(fault["report"] for fault in FAULTS if fault["repair_after_min"] is None)
+
+def out_all_day_report() -> str:
+    """The report for a fault that is not repaired today (real repair time: none, out all day)."""
+    return OUT_ALL_DAY_REPORT

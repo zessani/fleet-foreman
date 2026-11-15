@@ -113,12 +113,16 @@ class Day:
             return
         fault["noted"] = True
         actual = round(fault["repaired_at"] - fault["at"])
-        self.memory.add_lesson({
-            "tractor": self.farm.tractors[tractor_id].name, "report": fault["report"][:160],
-            "estimated_min": fault["estimate_min"], "actual_downtime_min": actual,
-            "lesson": f"This fault took {actual} min to repair. The estimate was "
-                      f"{fault['estimate_min']} min.",
-        })
+        lesson = {"tractor": self.farm.tractors[tractor_id].name, "report": fault["report"][:160],
+                  "estimated_min": fault["estimate_min"], "actual_downtime_min": actual,
+                  "lesson": f"This fault took {actual} min to repair. The estimate was "
+                            f"{fault['estimate_min']} min."}
+        if fault.get("out_for_day"):
+            # The answer was "out for the day", but the tractor came back: the real time wins.
+            lesson["estimated_out_for_day"] = True
+            lesson["lesson"] = (f"The AI Recovery agent said out for the day, but this fault took "
+                                f"{actual} min to repair.")
+        self.memory.add_lesson(lesson)
 
     def job_label(self, job_id: str) -> str:
         job = self.farm.jobs[job_id]
@@ -249,7 +253,7 @@ class Day:
         earlier guess when the AI Recovery agent meets the same kind of fault again.
         """
         fault = self.faults.get(tractor_id)
-        if (fault is None or fault.get("estimate_min") is None
+        if (fault is None or fault.get("estimate_min") is None or fault.get("out_for_day")
                 or fault.get("repaired_at") is not None or fault.get("noted")):
             return
         if not day_over and fault.get("missed"):
@@ -271,6 +275,38 @@ class Day:
         })
         self.memory.log.append(self.now, "Recovery monitor", "estimate_missed", lesson,
                                tractor=tractor_id, estimate_min=estimate, still_down_after_min=out)
+
+    def _note_out_for_day_confirmed(self, tractor_id: str) -> None:
+        """The answer was "out for the day" and the day ended with the tractor still down."""
+        fault = self.faults.get(tractor_id)
+        if fault is None or not fault.get("out_for_day") or fault.get("noted"):
+            return
+        fault["noted"] = True
+        name = self.farm.tractors[tractor_id].name
+        out = round(self.now - fault["at"])
+        lesson = (f"The AI Recovery agent said out for the day and {name} was not repaired that day: "
+                  f"still out of service {out} min after it failed.")
+        self.memory.add_lesson({
+            "tractor": name, "report": fault["report"][:160], "estimated_min": fault["estimate_min"],
+            "estimated_out_for_day": True, "still_down_after_min": out,
+            "not_repaired_that_day": True, "lesson": lesson,
+        })
+        self.memory.log.append(self.now, "Recovery monitor", "estimate_confirmed", lesson,
+                               tractor=tractor_id, still_down_after_min=out)
+
+    def _close_faults(self) -> None:
+        """The day is over: save the real outcome of every estimated fault as one lesson."""
+        for tractor_id, fault in self.faults.items():
+            if fault.get("estimate_min") is None or fault.get("noted"):
+                continue
+            if fault.get("repaired_at") is not None:
+                self.note_actual_downtime(tractor_id)  # back so late the status feed had not seen it
+            elif tractor_id not in self.foreman.watch.down:
+                continue
+            elif fault.get("out_for_day"):
+                self._note_out_for_day_confirmed(tractor_id)
+            elif self.now - fault["at"] > fault["estimate_min"]:
+                self._note_missed_estimate(tractor_id, day_over=True)
 
     def _release_hold(self, job_id: str) -> None:
         if self.foreman.ai_holds.pop(job_id, None) is not None:
@@ -333,10 +369,7 @@ class Day:
         if self.finished or not (all_done or self.now >= self.farm.horizon_min - TIME_EPS):
             return
         self.finished = True
-        for tractor_id in list(self.faults):
-            if tractor_id in self.foreman.watch.down and self.now - self.faults[tractor_id]["at"] > (
-                    self.faults[tractor_id].get("estimate_min") or math.inf):
-                self._note_missed_estimate(tractor_id, day_over=True)
+        self._close_faults()
         if self.desk is not None:
             self.desk.close_day()
         self.crew.recovery.note_progress(self.foreman.sim.events)
