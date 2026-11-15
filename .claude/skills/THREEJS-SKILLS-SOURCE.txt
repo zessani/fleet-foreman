@@ -1,0 +1,5 @@
+Three.js skills copied from https://github.com/cloudai-x/threejs-skills (MIT), commit 0e181866f095b5f06d005133876e926515390d95.
+Copied 10 of 13 skills. Left out: animation, react-three-fiber, asset-pipeline.
+They assume three.js r186. This repo vendors r160 in web/vendor/three, so check API names against that version.
+
+frontend-design copied from https://github.com/anthropics/skills (skills/frontend-design, Apache 2.0, licence text kept in that folder).
