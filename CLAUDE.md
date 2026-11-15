@@ -200,6 +200,27 @@ with one clear job each. They need no model. The two AI agents are
 `foreman/ai_recovery.py` and `foreman/ai_safety.py`, started by `foreman/ai_desk.py`
 through `AiCrew`. When the model is off, unreachable or wrong, every decision is rule-based.
 
+**Planner self-tune** (`foreman/selftune.py`, no model). When a live day ends, Foreman replays
+the days it has already run (the latest 12) with a few idle weights around the current one
+(for 0.7: 0.5, 0.6, 0.85, 1.0), using the sweep code. It adopts a candidate only if it finishes
+at least as many jobs on time, wastes no more minutes, is clearly better on one of the two, and
+breaks no rule. It never adopts on fewer than 5 past days. Every run is logged in
+`runs/selftune/selftune.jsonl` and the latest sentence is on the decisions panel. Trial weights
+are seen only by the self-tune's own thread, so a live plan never uses one.
+
+**AI Safety agent memory.** Each warning or hold it raises is saved with what Foreman did and,
+at the end of the day, what happened after (jobs on time, rule violations, whether the job or
+tractor it named had trouble) in `runs/safety_concerns.jsonl`. It reads them on later reviews
+through the read-only tool `past_concerns`. It still cannot approve anything.
+
+**Resilience step (Ahmed, `foreman/resilience.py`).** After the normal search, the planner may
+pick a relocate or swap alternative within 5% of the cheapest plan if it cuts an estimated
+breakdown damage by at least 5%. It is off during recovery events. Measured on the 196 test
+days it changes no result (same jobs on time, wasted minutes and zero violations).
+
+**A scripted breakdown with no report** keeps the tractor out all day. With the AI agents on,
+the AI Recovery agent is given the sample report for a fault that is not repaired today.
+
 **Safety rules are fixed.** Learning may tune estimates. It may never relax a rule.
 The AI Safety agent can ask for more caution. It cannot remove a check.
 
@@ -419,7 +440,15 @@ Commands
   Press Reset on the dashboard afterwards.
 - `python -m foreman.sweep`: the comparison across every test day.
 
+- `python -m foreman.selftune report [--days N] | reset | show`: the planner's self-tune (below).
+  `reset` puts the saved settings back to the defaults before a demo.
+
 - `POST /api/control` with `{action: start|pause|reset, speed}`
+- `POST /api/scenario/random` with `{seed}` (optional): builds a farm with `tools/make_farm.py`,
+  passes it through `check_farm`, loads it and resets the day. The state then carries `seed`
+  and `scenario` is `random_<seed>`.
+- `GET /api/selftune`: `{settings, latest, min_days, history}`. `state.foreman.selftune` is
+  `{sentence, decision, current, days}` or null.
 - `POST /api/scenario` with `{name}` to load a farm file
 - `POST /api/event` with `{type: breakdown|repair|block_road|open_road|set_priority|add_job, ...}`
 - `GET /api/why?job=J1`: `{job, label, status, chosen, held_reason, others, text}`.
