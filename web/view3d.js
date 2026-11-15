@@ -607,7 +607,7 @@ function makeTractor(t) {
 
   // Dust (tilling) and mist (spraying): a few soft puffs recycled behind the implement.
   const puffs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6),
-    new THREE.MeshBasicMaterial({ color: 0xd8c3a0, transparent: true, opacity: 0.28, depthWrite: false }), 14);
+    new THREE.MeshBasicMaterial({ color: 0xd8c3a0, transparent: true, opacity: 0.2, depthWrite: false }), 14);
   puffs.frustumCulled = false; puffs.visible = false;
   tractorLayer.add(puffs);
   view.puffs = puffs;
@@ -969,14 +969,15 @@ function updateTractors(dt, iconScale, time) {
       if (emit && view.puffTimer > 0.09) {
         view.puffTimer = 0;
         const p = view.puffData[view.puffNext++ % view.puffData.length];
-        const back = (type === "spray" ? 5.6 : 4.6) * M * iconScale, half = ((view.spec || {}).width || 4) * M * iconScale / 2;
-        p.p.set(view.pos.x - Math.cos(view.heading) * back + Math.sin(view.heading) * (Math.random() - 0.5) * 2 * half, 0.1 * iconScale,
+        const drawn = Math.min(iconScale, MAX_IMPLEMENT_SCALE);
+        const back = (type === "spray" ? 5.6 : 4.6) * M * drawn, half = ((view.spec || {}).width || 4) * M * drawn / 2;
+        p.p.set(view.pos.x - Math.cos(view.heading) * back + Math.sin(view.heading) * (Math.random() - 0.5) * 2 * half, 0.06 * drawn,
                 view.pos.z + Math.sin(view.heading) * back + Math.cos(view.heading) * (Math.random() - 0.5) * 2 * half);
-        p.life = 1; p.s = (type === "spray" ? 0.12 : 0.2) * iconScale;
+        p.life = 1; p.s = (type === "spray" ? 0.07 : 0.12) * drawn;
       }
       view.puffData.forEach((p, i) => {
         p.life = Math.max(0, p.life - dt * 0.8);
-        dummy.position.copy(p.p); dummy.position.y += (1 - p.life) * 0.5 * iconScale;
+        dummy.position.copy(p.p); dummy.position.y += (1 - p.life) * 0.25 * Math.min(iconScale, MAX_IMPLEMENT_SCALE);
         dummy.scale.setScalar(p.life > 0 ? p.s * (1.2 + (1 - p.life) * 2.5) * p.life ** 0.4 : 0.0001);
         dummy.updateMatrix(); view.puffs.setMatrixAt(i, dummy.matrix);
       });
