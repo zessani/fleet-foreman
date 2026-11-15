@@ -1059,7 +1059,7 @@ function updateTractors(dt, iconScale, time) {
   }
 }
 
-function updateFields(dt) {
+function updateFields(dt, realDt) {
   if (!state) return;
   const byField = {};
   for (const job of state.foreman.jobs) {
@@ -1073,7 +1073,7 @@ function updateFields(dt) {
   for (const [id, field] of Object.entries(fields)) {
     paintField(field, byField[id] || [], state.catalog, state.planImplement);
     if (field.flashT > 0) {
-      field.flashT = Math.max(0, field.flashT - dt);
+      field.flashT = Math.max(0, field.flashT - realDt);
       field.flash.visible = field.flashT > 0;
       field.flash.material.opacity = 0.85 * Math.abs(Math.sin(field.flashT * Math.PI * 1.25)) * Math.min(1, field.flashT * 2);
     }
@@ -1163,9 +1163,9 @@ function frame() {
 
   updateSun(dt);
   updateShadowFrustum(distance);
-  updateFields(dt);
+  updateFields(dt, Math.min(elapsed, 3));
   updateTractors(dt, iconScale, time);
-  updateRouteAnimation(dt);
+  updateRouteAnimation(Math.min(elapsed, 3));   // real time, so a fade still ends if the tab was in the background
   updateCard();
   $("scale-note").textContent = iconScale < 1.05
     ? "Everything is at true size."
