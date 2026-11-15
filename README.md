@@ -6,14 +6,23 @@ Foreman is a coordination layer, a rule-based core with two AI agents, that assi
 
 A farm manager today decides by phone and whiteboard which tractor does which job, and redoes the plan by hand when a machine breaks. Foreman does that job with no human in the loop. You give it a farm (fields, roads, tractors, implements) and a list of jobs with priorities and deadlines. A rule-based planner, route finder, safety gate and recovery monitor pick the right implement for each job, decide which tractor does what and in what order, route the tractors between fields so no two share a field, check every plan against fixed safety rules, and send it to the tractors. When a tractor breaks down, they notice it, keep every bit of finished work, give only the unfinished part to other tractors, and explain the new plan in plain English. We plan the work **between** fields; AgOpenGPS already plans the passes **inside** a field.
 
-Foreman also prevents fragile assignments before a failure occurs. It first
-finds the cheapest normal operating plan, then considers relocation and swap
-alternatives within 5% of that cost. A resilience estimate uses each tractor's
-configured failure rate, repair duration, compatible backups, recovery travel
-and deadline slack. An alternative is selected only when it reduces estimated
-disruption damage by at least 5%, and resilience has only 10% weight inside
-the shortlist. During a real breakdown, normal recovery and assignment
-stability take precedence.
+After the normal search, the planner runs one more step on day plans and on
+plans that may rebalance. It looks at relocations and swaps that cost at most 5%
+more than the cheapest plan, scores each by an estimated damage if a tractor
+broke down (failure rate, repair time, backups, recovery travel, deadline slack),
+and takes one only if that damage drops by at least 5%. During a real breakdown
+this step is skipped. The measured effect is small and mixed. On the 196 test
+days it changed no plan, and the totals are identical with it on or off. On 40
+random farms (400 more days, each quiet or with one breakdown) it changed the
+day plan on 80 of the 596 days. Of those 80, the day ended better on 15, the same
+on 30 and worse on 35. Over all 596 days it finished 5,198 jobs on time with the
+step and 5,204 without, and wasted 192,036 minutes with it and 190,930 without.
+One better case: on random farm 12 with tractor T3 breaking at minute 60, the step
+swapped two mowing jobs between T2 and T3 in the day plan (J2 to T3, J10 to T2),
+and the day finished 8 jobs on time instead of 7, with 320 wasted minutes
+instead of 362. The step has not been shown to help on average; it is kept as a
+guard that stays within 5% of the cheapest plan. Run `python -m foreman.resilience_report`
+to repeat these numbers.
 
 ```mermaid
 flowchart TB
