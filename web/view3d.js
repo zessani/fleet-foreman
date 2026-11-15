@@ -200,12 +200,15 @@ function updateEnvironment(time, daylight) {
   for (const m of envMaterials) m.envMapIntensity = level * (m.userData.envScale ?? 1);
 }
 
+// The point the camera looks at is drawn right of and below the middle of the screen,
+// so the farm, or a followed tractor, sits clear of the readout in the top left corner.
+let viewShift = [0.08, 0.07];   // chosen per farm by the overview fit
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);   // also sets the CSS size, so a high-density screen is not drawn double size
   labelRenderer.setSize(w, h);
   camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  camera.setViewOffset(w, h, -viewShift[0] * w, -viewShift[1] * h, w, h);   // also updates the projection
 }
 window.addEventListener("resize", resize);
 resize();
@@ -479,21 +482,32 @@ function buildFarm(farm) {
   const span = Math.max(size.x, size.z * 1.3, 200);
   overview.target.copy(centre);
   overview.position.set(centre.x + span * 0.12, span * 0.24, centre.z + span * 0.66);
-  // Pull back only as far as needed for every field and the yard to sit clear of the panels.
+  // Frame the farm as large as it will go with every field, the yard and their name tags
+  // clear of the panels: try a few places for the farm on screen, keep the closest fit.
   const points = farm.nodes.filter((n) => n.kind !== "junction").map((n) => P(n.x, n.y));
   const direction = overview.position.clone().sub(centre).normalize(), probe = camera.clone();
   const panels = ["readout", "buttons", "fleet"].map((id) => $(id).getBoundingClientRect());
-  for (let distance = span * 0.3; distance < span * 3; distance *= 1.05) {
-    probe.position.copy(centre).addScaledVector(direction, distance);
-    probe.lookAt(centre);
-    probe.updateMatrixWorld();
-    const inView = points.every((p) => {
-      const q = p.clone().project(probe), x = (q.x + 1) / 2 * innerWidth, y = (1 - q.y) / 2 * innerHeight;
-      if (x < 60 || x > innerWidth - 60 || y < 150 || y > innerHeight - 40) return false;
-      // A name tag sits above each tractor and field, so leave room for it under a panel.
-      return !panels.some((r) => x > r.left - 30 && x < r.right + 30 && y > r.top - 30 && y < r.bottom + 80);
-    });
-    if (inView) { overview.position.copy(probe.position); break; }
+  const w = innerWidth, h = innerHeight;
+  let best = null;
+  for (const shiftX of [0, 0.05, 0.1, 0.15, 0.2]) for (const shiftY of [0.02, 0.07, 0.12, 0.17]) {
+    probe.setViewOffset(w, h, -shiftX * w, -shiftY * h, w, h);
+    for (let distance = span * 0.3; distance < (best ? best.distance : span * 4); distance *= 1.04) {
+      probe.position.copy(centre).addScaledVector(direction, distance);
+      probe.lookAt(centre);
+      probe.updateMatrixWorld();
+      const inView = points.every((p) => {
+        const q = p.clone().project(probe), x = (q.x + 1) / 2 * w, y = (1 - q.y) / 2 * h;
+        if (x < 60 || x > w - 60 || y < 130 || y > h - 40) return false;
+        // A name tag sits above each tractor and field, so leave room for it under a panel.
+        return !panels.some((r) => x > r.left - 30 && x < r.right + 30 && y > r.top - 30 && y < r.bottom + 60);
+      });
+      if (inView) { best = { distance, shift: [shiftX, shiftY] }; break; }
+    }
+  }
+  if (best) {
+    overview.position.copy(centre).addScaledVector(direction, best.distance);
+    viewShift = best.shift;
+    resize();
   }
   flyTo(overview.position, overview.target, 0);
 }
@@ -1342,6 +1356,7 @@ function updateHud(next) {
   const key = JSON.stringify(rows);
   if (key === fleetKey) return;
   fleetKey = key;
+  $("fleet").classList.toggle("compact", rows.length > 3);
   $("fleet-rows").replaceChildren(...rows.map(([id, name, color, what, fuel, status, on]) => {
     const row = document.createElement("button");
     row.className = "fleet-row" + (on ? " on" : "");
