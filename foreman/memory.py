@@ -43,6 +43,12 @@ class EventLog:
         return [line for line in self._lines if line["event"] == event]
 
 
+def _key_words(text: str) -> set[str]:
+    """The words of a fault report that say what broke (short filler words dropped)."""
+    return {word for word in "".join(c.lower() if c.isalnum() else " " for c in text).split()
+            if len(word) > 3}
+
+
 class Memory:
     def __init__(self, day_start_min: float, log_path: Path | None = None,
                  lessons_path: Path | None = None) -> None:
@@ -69,6 +75,20 @@ class Memory:
             self._lessons_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self._lessons_path, "a", encoding="utf-8") as lessons_file:
                 lessons_file.write(json.dumps(lesson) + "\n")
+
+    def relevant_lessons(self, report: str, limit: int = 6) -> list[dict]:
+        """The past lessons most like this fault report: shared words first, and
+        lessons that carry a real repair time ahead of ones that only carry a guess."""
+        words = _key_words(report)
+
+        def score(item: tuple[int, dict]) -> tuple[int, int, int]:
+            index, lesson = item
+            shared = len(words & _key_words(lesson.get("report", "")))
+            return (shared, 1 if "actual_downtime_min" in lesson else 0, index)
+
+        ranked = sorted(enumerate(self.lessons), key=score, reverse=True)
+        return [lesson for index, lesson in ranked[:limit]
+                if words & _key_words(lesson.get("report", ""))]
 
     def downtime_gap(self) -> float | None:
         """Average minutes between the AI Recovery agent's estimate and the real repair time."""

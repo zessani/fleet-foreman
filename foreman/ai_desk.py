@@ -200,7 +200,7 @@ class AiDesk:
                                         ("name", "status", "job", "fuel_pct", "mounted")}
                             for row in run.block()["tractors"]},
             jobs_at_risk=at_risk,
-            past_lessons=day.memory.lessons[-LESSONS_SHOWN:],
+            past_lessons=day.memory.relevant_lessons(fault["report"]),
         )
 
     def _safety_case(self) -> SafetyCase:

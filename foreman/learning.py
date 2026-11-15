@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import random
 from pathlib import Path
 
 from foreman.day import Day
@@ -142,3 +143,49 @@ def run_days(raw: dict, days: int, learning: Learning, use_truth: bool = True) -
     learning.start_day()
     learning.save()
     return results
+
+
+CHART_SEED = 7           # the chart is the same every time
+CHART_NOISE = 0.03       # day-to-day variation in real field speed, as a share
+
+
+def _field_ids(raw: dict) -> list[str]:
+    # Fields are the nodes the jobs work on, in the file's order.
+    worked = {job["field"] for job in raw.get("jobs", [])}
+    return [n["id"] for n in raw["nodes"] if n["id"] in worked]
+
+
+def chart_truth(raw: dict, seed: int = CHART_SEED) -> dict[str, float]:
+    """Hidden speed factors for the chart only: 10 to 25% off the catalog rate per field."""
+    rng = random.Random(seed)
+    factors = {}
+    for field in _field_ids(raw):
+        size = rng.uniform(0.10, 0.25)
+        slower = rng.random() < 2 / 3  # real farms run slow more often than fast
+        factors[f"*|*|{field}"] = round(1 - size if slower else 1 + size, 3)
+    return factors
+
+
+def chart_days(raw: dict, days: int = 5, seed: int = CHART_SEED, noise: float = CHART_NOISE) -> dict:
+    """Run quiet days against the chart's hidden factors with a throwaway Learning (nothing saved)."""
+    base = chart_truth(raw, seed)
+    learning = Learning()  # no path: never touches the disk
+    results = []
+    for number in range(1, days + 1):
+        day_raw = copy.deepcopy(raw)
+        day_raw["events"] = []
+        rng = random.Random(f"{seed}-{number}")  # own noise per day, repeatable
+        day_raw["truth"] = {k: v * (1 + rng.uniform(-noise, noise)) for k, v in base.items()}
+        learning.start_day()
+        day = Day(day_raw, use_truth=True, learning=learning)
+        day.advance(day.farm.horizon_min)
+        totals = day.foreman.sim.totals()
+        entry = learning._day_entry(number)
+        results.append({
+            "day": number, "gap_pct": round(entry["gap_pct"], 1), "samples": entry["samples"],
+            "violations": totals["violations"], "jobs_done": totals["jobs_done"],
+            "on_time": totals["on_time"],
+        })
+    learning.start_day()
+    return {"seed": seed, "noise_pct": noise * 100, "hidden_factors": base,
+            "days": results, "factors": learning.summary()["factors"]}

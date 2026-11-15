@@ -88,6 +88,12 @@ def get_learning() -> dict:
     return engine.learning_report()
 
 
+@app.get("/api/learning/chart")
+def get_learning_chart() -> dict:
+    """The five-day learning curve for the chart: seeded hidden factors and noise, nothing saved."""
+    return engine.learning_chart()
+
+
 @app.post("/api/learning/run")
 def post_learning_run(body: dict[str, Any]) -> dict:
     """{days}: run that many days off screen with hidden speed factors on, and learn from them."""

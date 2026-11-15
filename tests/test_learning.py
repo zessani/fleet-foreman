@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from foreman.learning import Learning, run_days
+from foreman.learning import Learning, chart_days, chart_truth, run_days
 from foreman.model import farm_from_dict, truth_factor
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -116,3 +116,37 @@ def test_corrupt_file_starts_empty(tmp_path):
     assert learning.summary() == {"days": [], "factors": [], "days_run": 0}
     path.write_text('{"sums": 3}', encoding="utf-8")
     assert Learning(path).summary()["factors"] == []
+
+
+def sample_farm() -> dict:
+    return load("scenarios/farms/sample_farm.json")
+
+
+def test_chart_is_repeatable():
+    assert chart_days(sample_farm()) == chart_days(sample_farm())
+
+
+def test_chart_factors_are_10_to_25_percent_off():
+    factors = chart_truth(sample_farm())
+    assert factors
+    assert all(0.10 <= abs(f - 1) <= 0.25 + 1e-9 for f in factors.values())
+
+
+def test_chart_curve_shape():
+    days = chart_days(sample_farm())["days"]
+    assert days[0]["gap_pct"] > 8
+    assert 0 < days[-1]["gap_pct"] < days[0]["gap_pct"] / 2
+    assert all(d["violations"] == 0 for d in days)
+    assert all(d["jobs_done"] == len(sample_farm()["jobs"]) for d in days)
+
+
+def test_chart_days_changes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    raw = sample_farm()
+    before = copy.deepcopy(raw)
+    existing = Learning()
+    sums, history = copy.deepcopy(existing.sums), copy.deepcopy(existing.history)
+    chart_days(raw)
+    assert raw == before
+    assert (existing.sums, existing.history) == (sums, history)
+    assert list(tmp_path.iterdir()) == []

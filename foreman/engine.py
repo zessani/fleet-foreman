@@ -50,6 +50,7 @@ class Engine:
         self.learning = learning       # learned work rates, kept across days
         self._lessons_path = lessons_path
         self.day: Day | None = None
+        self._chart: tuple[str, dict] | None = None  # cached learning chart for the loaded farm
         self.running = False
         self.speed = DEFAULT_SPEED
         self.load(scenario or default_scenario())
@@ -141,6 +142,16 @@ class Engine:
                     "items": memory.estimates[-30:],
                 },
             }
+
+    def learning_chart(self) -> dict:
+        """The learning curve for the chart only: its own seeded hidden factors and
+        day-to-day noise, a fresh memory, nothing saved. No other number depends on it."""
+        from foreman.learning import chart_days
+
+        with self._lock:
+            if self._chart is None or self._chart[0] != self.scenario:
+                self._chart = (self.scenario, chart_days(self.raw))
+            return self._chart[1]
 
     def run_learning_days(self, days: int) -> list[dict]:
         """Run several days off screen, hidden speed factors on, so the estimates improve."""
