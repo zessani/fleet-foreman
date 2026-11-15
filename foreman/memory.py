@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Callable
 
 from foreman.model import clock
 
@@ -63,6 +64,10 @@ class Memory:
         self.estimates: list[dict] = []  # AI Recovery agent downtime estimates against the real repair time
         self._lessons_path = lessons_path
         self.lessons: list[dict] = self._load_lessons()  # written by the AI agents, kept across days
+        self._concerns_path = (lessons_path.with_name("safety_concerns.jsonl")
+                               if lessons_path is not None else None)
+        self.concerns: list[dict] = self._load_concerns()  # raised by the AI Safety agent, kept across days
+        self._open_concerns: list[dict] = []  # raised today, outcome not known yet
 
     def _load_lessons(self) -> list[dict]:
         if self._lessons_path is None or not self._lessons_path.exists():
@@ -74,6 +79,42 @@ class Memory:
             except json.JSONDecodeError:
                 continue  # a damaged line must not stop the day
         return lessons
+
+    def _load_concerns(self) -> list[dict]:
+        if self._concerns_path is None or not self._concerns_path.exists():
+            return []
+        concerns = []
+        for line in self._concerns_path.read_text(encoding="utf-8").splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # a damaged line must not stop the day
+            if isinstance(record, dict):
+                concerns.append(record)
+        return concerns
+
+    def add_concern(self, record: dict) -> dict:
+        """Keep a concern raised today. It is written to the file once its outcome is known."""
+        self.concerns.append(record)
+        self._open_concerns.append(record)
+        return record
+
+    def close_concerns(self, outcome_for: Callable[[dict], str]) -> None:
+        """Give every concern raised today its outcome and save it."""
+        for record in self._open_concerns:
+            if record.get("outcome"):
+                continue
+            record["outcome"] = outcome_for(record)
+            if self._concerns_path is not None:
+                self._concerns_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._concerns_path, "a", encoding="utf-8") as concerns_file:
+                    concerns_file.write(json.dumps(record) + "\n")
+        self._open_concerns = []
+
+    def past_concerns(self, limit: int = 8) -> list[dict]:
+        """The latest concerns whose story is finished, newest first."""
+        finished = [record for record in self.concerns if record.get("outcome")]
+        return list(reversed(finished))[:limit]
 
     def add_lesson(self, lesson: dict) -> None:
         self.lessons.append(lesson)

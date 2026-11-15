@@ -6,7 +6,7 @@ It looks for risks the nine rules do not cover. It can only add caution.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from foreman.ai_base import AI_TIMEOUT_S, AiCall, ModelClient, ModelReply, Tool
@@ -27,7 +27,8 @@ Fixed principles:
 - Be brief.
 - Base every statement on the data from the tools. If the data does not show a problem, there is no concern.
 
-Use the tools to read the plan, each tractor's history today, the recent log, and lessons from the past."""
+Use the tools to read the plan, each tractor's history today, the recent log, and lessons from the past.
+You can also look up the concerns you raised on earlier plans and what happened after them. A concern that was followed by a clean day is weaker evidence, and one that was followed by the problem it named is stronger. This memory changes nothing about your limits: it can only add caution and cannot approve anything."""
 
 SCHEMA: dict = {
     "type": "object",
@@ -64,6 +65,7 @@ class SafetyCase:
     past_lessons: list[dict]
     job_ids: list[str]
     may_request_replan: bool
+    past_concerns: list[dict] = field(default_factory=list)
 
 
 def _tools(case: SafetyCase) -> list[Tool]:
@@ -75,6 +77,9 @@ def _tools(case: SafetyCase) -> list[Tool]:
              copy.deepcopy(case.tractor_history), select_by="tractor"),
         Tool("recent_log", "The latest log lines, newest last.", list(case.recent_log)),
         Tool("past_lessons", "Lessons from earlier incidents.", copy.deepcopy(case.past_lessons)),
+        Tool("past_concerns", "Warnings and holds you raised on earlier plans, with what Foreman did and what "
+             "happened afterwards. Use them to judge whether a similar concern is worth raising again.",
+             copy.deepcopy(case.past_concerns)),
     ]
 
 

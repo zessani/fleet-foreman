@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from foreman.engine import EVENT_LOG_PATH, ROOT, Engine, find_scenario
 from foreman.learning import Learning
 from foreman.llm import get_client, load_env_file
+from foreman.selftune import MIN_DAYS, SelfTune
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 HOST = "127.0.0.1"
@@ -54,10 +55,11 @@ def _agopenweb_config() -> tuple[dict[str, str] | None, tuple[float, float]]:
 
 
 AGOPENWEB_URLS, AGOPENWEB_ORIGIN = _agopenweb_config()
+selftune = SelfTune(ROOT / "runs" / "selftune")
 engine = Engine(log_path=EVENT_LOG_PATH, client=get_client(),
                 learning=Learning(ROOT / "runs" / "learned.json"),
                 lessons_path=ROOT / "runs" / "lessons.jsonl",
-                agopenweb_urls=AGOPENWEB_URLS, agopenweb_origin=AGOPENWEB_ORIGIN)
+                agopenweb_urls=AGOPENWEB_URLS, agopenweb_origin=AGOPENWEB_ORIGIN, selftune=selftune)
 
 
 def _clock_loop(stop: threading.Event) -> None:
@@ -116,6 +118,13 @@ def get_learning() -> dict:
 def get_learning_chart() -> dict:
     """The five-day learning curve for the chart: seeded hidden factors and noise, nothing saved."""
     return engine.learning_chart()
+
+
+@app.get("/api/selftune")
+def get_selftune() -> dict:
+    """The planner's current settings, the latest self-tune, and the last 10 self-tune records."""
+    return {"settings": selftune.settings(), "latest": selftune.latest(), "min_days": MIN_DAYS,
+            "history": selftune.history(10)}
 
 
 @app.post("/api/learning/run")

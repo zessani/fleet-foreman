@@ -53,7 +53,22 @@ def safety_case(may_replan=True):
         tractor_history={"t1": {"name": "Rusty", "jobs_done_today": 2, "breakdowns_today": 1, "minutes_worked": 90}},
         recent_log=["09:00 plan 3", "09:30 Rusty fault"],
         past_lessons=[], job_ids=["j1", "j2", "j3"], may_request_replan=may_replan,
+        past_concerns=[PAST],
     )
+
+
+PAST = {"clock": "08:00", "plan_no": 1, "action": "warn", "concern": "Rusty is overloaded.", "job": None,
+        "applied": "logged", "outcome": "Day ended with 3 of 3 jobs on time and 0 rule violations."}
+
+
+def test_a_safety_case_without_past_concerns_still_works():
+    case = safety_case()
+    bare = SafetyCase(plan_no=1, clock="08:00", now=0.0, plan_summary={"tractors": {}, "held": {}},
+                      tractor_history={}, recent_log=[], past_lessons=[], job_ids=[], may_request_replan=True)
+    assert bare.past_concerns == [] and case.past_concerns == [PAST]
+    client = FakeClient(good({"concerns": []}))
+    ai_safety.review(client, bare)
+    assert {t.name: t for t in client.seen["tools"]}["past_concerns"].data == []
 
 
 GOOD_RECOVERY = {"severity": "moderate", "downtime_min": 60, "reason": "hose swap", "lesson": "Keep spare hoses."}
@@ -197,15 +212,17 @@ def test_safety_tools_and_prompt():
     case = safety_case()
     call = ai_safety.review(client, case)
     tools = {t.name: t for t in client.seen["tools"]}
-    assert set(tools) == {"plan_summary", "tractor_history", "recent_log", "past_lessons"}
+    assert set(tools) == {"plan_summary", "tractor_history", "recent_log", "past_lessons", "past_concerns"}
     assert tools["tractor_history"].select_by == "tractor"
     assert tools["plan_summary"].data == case.plan_summary
     assert tools["tractor_history"].data == case.tractor_history
     assert tools["recent_log"].data == case.recent_log
+    assert tools["past_concerns"].data == case.past_concerns == [PAST]
     case.plan_summary["held"]["j9"] = "later change"  # the tool data is a snapshot
     assert "j9" not in tools["plan_summary"].data["held"]
     system, prompt = client.seen["system"], client.seen["prompt"]
     assert "never assigns jobs" in system and "cannot approve" in system
+    assert "earlier plans" in system and "cannot approve anything" in system
     assert "spread_dependent_jobs" in prompt and "empty list" in prompt
     assert "You may use request_replan" in prompt
     json.dumps(call.to_dict())

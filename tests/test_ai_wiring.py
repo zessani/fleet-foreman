@@ -32,10 +32,12 @@ class ScriptedModel:
         self.answers = {"recovery": list(recovery), "safety": list(safety)}
         self.delay_s = delay_s
         self.asked: list[str] = []
+        self.tools_seen: list[tuple[str, list]] = []
 
     def ask(self, system, prompt, tools, schema, timeout_s=AI_TIMEOUT_S) -> ModelReply:
         kind = "recovery" if "AI Recovery agent" in system else "safety"
         self.asked.append(kind)
+        self.tools_seen.append((kind, list(tools)))
         if self.delay_s:
             time.sleep(self.delay_s)
         queue = self.answers[kind]
@@ -251,3 +253,74 @@ def test_why_and_learning_are_served_by_the_engine() -> None:
     days = engine.run_learning_days(3)
     assert len(days) == 3 and all(day["violations"] == 0 for day in days)
     assert engine.learning_report()["factors"]
+
+
+def _warn(text: str) -> dict:
+    return {"concerns": [{"concern": text, "action": "warn", "job": None, "caution": None}]}
+
+
+def _hold(job: str) -> dict:
+    return {"concerns": [{"concern": f"{job} looks unsafe to start.", "action": "hold_job",
+                          "job": job, "caution": None}]}
+
+
+def _first_tool(model, name):
+    kind, tools = next(item for item in model.tools_seen if item[0] == "safety")
+    return next(tool for tool in tools if tool.name == name)
+
+
+def test_the_ai_safety_agent_remembers_its_concerns_across_days(tmp_path) -> None:
+    probe = Day(example_raw(), ai=AiCrew(ScriptedModel(), sync=True))
+    tractor = next(iter(probe.farm.tractors.values())).name
+    model = ScriptedModel(safety=[_warn(f"{tractor} may be overworked."), _hold("J5")])
+    day = day_with(model, [{"at": 10, "type": "set_priority", "job": "J4", "priority": 5}], tmp_path)
+    day.advance(day.farm.horizon_min)
+    assert day.finished
+    assert len(day.memory.concerns) == 2
+    for record in day.memory.concerns:
+        assert record["applied"] and record["outcome"].startswith("Day ended with")
+        assert "rule violation" in record["outcome"]
+    assert day.memory.concerns[0]["applied"] == "logged"
+    assert day.memory.concerns[1]["applied"] == "held for 30 min"
+    assert "J5 finished" in day.memory.concerns[1]["outcome"]
+    assert tractor in day.memory.concerns[0]["outcome"]
+    path = tmp_path / "safety_concerns.jsonl"
+    assert path.exists() and len(path.read_text().splitlines()) == 2
+    print(day.memory.concerns[1])
+
+    second = ScriptedModel()
+    new_day = day_with(second, [], tmp_path)
+    data = _first_tool(second, "past_concerns").data
+    assert [item["concern"] for item in data] == [r["concern"] for r in reversed(day.memory.concerns)]
+    assert all(item["outcome"] for item in data)
+
+
+def test_a_stale_safety_answer_adds_no_concern_and_no_ai_writes_no_file(tmp_path) -> None:
+    import threading
+
+    gate = threading.Event()
+
+    class SlowFirstReview(ScriptedModel):
+        def ask(self, system, prompt, tools, schema, timeout_s=AI_TIMEOUT_S) -> ModelReply:
+            first = not self.asked
+            reply = super().ask(system, prompt, tools, schema, timeout_s)
+            if first:
+                gate.wait(5)
+            return reply
+
+    day = Day(example_raw(), ai=AiCrew(SlowFirstReview(safety=[_warn("old plan worry")])),
+              lessons_path=tmp_path / "lessons.jsonl")
+    day.apply({"type": "set_priority", "job": "J4", "priority": 5})
+    gate.set()
+    for _ in range(200):
+        if not day.ai_thinking():
+            break
+        time.sleep(0.01)
+    day.drain_ai()
+    assert day.memory.log.of("ai_stale")
+    assert day.memory.concerns == []
+
+    plain = tmp_path / "plain"
+    no_ai = Day(example_raw(), lessons_path=plain / "lessons.jsonl")
+    no_ai.advance(no_ai.farm.horizon_min)
+    assert not (plain / "safety_concerns.jsonl").exists()

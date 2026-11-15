@@ -148,6 +148,17 @@ class AiDesk:
         for concern in concerns:
             self._log(SAFETY, "ai_concern", f"{concern['action']}: {concern['concern']}",
                       action=concern["action"], job=concern.get("job"))
+            done = "logged"
+            if concern["action"] == "hold_job":
+                done = (f"held for {HOLD_MIN:.0f} min" if self._can_hold(concern["job"])
+                        else "not held: the job had already started")
+            elif concern["action"] == "request_replan":
+                done = ("already in force" if run.spread_chain
+                        else "planner asked to keep dependent jobs on different tractors")
+            day.memory.add_concern({
+                "clock": clock(day.farm.day_start_min, day.now), "t": round(day.now, 2), "plan_no": plan_no,
+                "action": concern["action"], "concern": concern["concern"],
+                "job": concern.get("job"), "applied": done})
             if concern["action"] == "hold_job" and self._can_hold(concern["job"]):
                 run.ai_holds[concern["job"]] = f"held by the AI Safety agent: {concern['concern'][:90]}"
                 day.schedule({"at": day.now + HOLD_MIN, "type": "_hold_release",
@@ -170,6 +181,41 @@ class AiDesk:
                          if run.safety.get("passed") else "the new plan did not pass the safety gate")
         call.applied = (", ".join(notes) or "Nothing changed").capitalize() + "."
         self._log(SAFETY, "ai_applied", call.applied)
+
+    def close_day(self) -> None:
+        """The day is over: write down what happened after each concern, as plain facts."""
+        day = self.day
+        totals = day.foreman.sim.totals()
+        total_jobs = len(day.farm.jobs)
+        violations = len(day.foreman.sim.violations)
+        head = (f"Day ended with {totals['on_time']} of {total_jobs} jobs on time and "
+                f"{violations} rule violation{'' if violations == 1 else 's'}.")
+
+        def outcome_for(record: dict) -> str:
+            parts = [head]
+            job_id = record.get("job")
+            if job_id in day.foreman.sim.jobs:
+                state = day.foreman.sim.jobs[job_id]
+                if state.status != "done":
+                    parts.append(f"{job_id} did not finish.")
+                elif state.done_at <= day.farm.jobs[job_id].deadline:
+                    parts.append(f"{job_id} finished on time.")
+                else:
+                    parts.append(f"{job_id} finished late.")
+            text = record.get("concern", "").lower()
+            for tractor_id, tractor in day.farm.tractors.items():
+                if tractor.name.lower() not in text:
+                    continue
+                later = [i for i in day.memory.incidents if i.get("tractor") == tractor_id
+                         and i.get("t", 0.0) >= record.get("t", 0.0)]
+                if later:
+                    when = clock(day.farm.day_start_min, later[0]["t"])
+                    parts.append(f"{tractor.name} broke down later that day at {when}.")
+                else:
+                    parts.append(f"{tractor.name} did not break down later that day.")
+            return " ".join(parts)
+
+        day.memory.close_concerns(outcome_for)
 
     def _can_hold(self, job_id: str | None) -> bool:
         state = self.day.foreman.sim.jobs.get(job_id)
@@ -237,6 +283,7 @@ class AiDesk:
             past_lessons=day.memory.lessons[-LESSONS_SHOWN:],
             job_ids=open_jobs,
             may_request_replan=(run.plan_no != self._made_for_safety and not run.spread_chain),
+            past_concerns=day.memory.past_concerns(),
         )
 
     def _log(self, agent: str, event: str, message: str, **data) -> None:

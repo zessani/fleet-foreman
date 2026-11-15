@@ -12,6 +12,8 @@ follows the same rules, so predicted and simulated times agree.
 from __future__ import annotations
 
 import math
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable
 
@@ -33,6 +35,24 @@ W_EARLY = 0.01           # per priority point, per minute until a job finishes
 SpeedFactor = Callable[[str, str, str], float]
 
 Order = dict[str, list[str]]  # tractor id -> job ids in the order it does them
+
+
+_trial = threading.local()  # a weight being tried by the self-tune, seen by its own thread only
+
+
+def idle_weight() -> float:
+    """The idle weight for this thread: a trial value if one is set, otherwise W_WAIT."""
+    return getattr(_trial, "weight", None) or W_WAIT
+
+
+@contextmanager
+def trial_idle_weight(weight: float):
+    """Try another idle weight in this thread only, so a live plan in another thread is unaffected."""
+    _trial.weight = weight
+    try:
+        yield
+    finally:
+        _trial.weight = None
 
 
 @dataclass
@@ -207,7 +227,7 @@ class Evaluator:
 
         makespan = max(free) if count else now
         idle = sum(makespan - free_at for free_at in free)
-        cost = (late_cost + W_DRIVE * (travel + service) + W_WAIT * (wait + idle) + W_EARLY * early)
+        cost = (late_cost + W_DRIVE * (travel + service) + idle_weight() * (wait + idle) + W_EARLY * early)
         return Schedule(stops, cost, travel, service, wait, idle, late_jobs, makespan)
 
     def _leg(self, tractor_id: str, node: str, free_at: float, fuel: float, mounted: str,

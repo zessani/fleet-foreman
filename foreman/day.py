@@ -298,6 +298,8 @@ class Day:
         if self.finished or not (all_done or self.now >= self.farm.horizon_min - TIME_EPS):
             return
         self.finished = True
+        if self.desk is not None:
+            self.desk.close_day()
         self.crew.recovery.note_progress(self.foreman.sim.events)
         self._learn_from(self.foreman.sim.events)
         self.foreman.sim.events.clear()

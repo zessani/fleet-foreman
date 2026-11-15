@@ -158,6 +158,11 @@
     const changes = el("ul", "dp-list");
     change.box.append(headline, summary, chips, changes);
 
+    const tune = card("Planner self-tune", true);
+    const tuneText = el("p", "dp-summary");
+    tune.box.append(tuneText);
+    tune.box.hidden = true;
+
     const safety = card("Safety gate");
     const badge = el("div", "dp-badge dp-none", "NOT CHECKED YET");
     const safetyLine = el("p", "dp-line");
@@ -173,9 +178,9 @@
     log.box.append(logBody);
 
     const status = el("div", "dp-status");
-    grid.append(change.box, safety.box, reasoning.box, log.box, status);
+    grid.append(change.box, tune.box, safety.box, reasoning.box, log.box, status);
 
-    parts = { headline, summary, chips, changes, changeNote: change.note, badge, safetyLine,
+    parts = { tuneBox: tune.box, tuneText, headline, summary, chips, changes, changeNote: change.note, badge, safetyLine,
               checks, safetyNote: safety.note, reasoningBody, reasoningNote: reasoning.note,
               logBody, logNote: log.note, status };
     lastKeys = {};
@@ -229,6 +234,15 @@
     (story.changes || []).forEach(function (sentence) {
       parts.changes.append(el("li", null, sentence));
     });
+  }
+
+  function renderTune(foreman) {
+    // Older servers have no self-tune field; then the card stays hidden.
+    const tune = foreman.selftune;
+    const sentence = tune && typeof tune.sentence === "string" ? tune.sentence : "";
+    if (!changed("tune", sentence)) return;
+    parts.tuneText.textContent = sentence;
+    parts.tuneBox.hidden = !sentence;
   }
 
   function renderSafety(foreman) {
@@ -387,6 +401,7 @@
     if (!parts) build();
     const foreman = (state && state.foreman) || {};
     renderChange(foreman);
+    renderTune(foreman);
     renderSafety(foreman);
     renderLog(foreman);
     renderReasoning(foreman.ai, foreman.reasoning);

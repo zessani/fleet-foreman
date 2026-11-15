@@ -15,6 +15,7 @@ from foreman.ai_crew import AiCrew
 from foreman.day import Day
 from foreman.model import clock
 from foreman.nav import RoadMap
+from foreman.selftune import SelfTune
 from foreman.why import why
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,7 +45,8 @@ class Engine:
                  client: ModelClient | None = None, learning=None,
                  lessons_path: Path | None = None,
                  agopenweb_urls: dict[str, str] | None = None,
-                 agopenweb_origin: tuple[float, float] = (33.4484, -112.0740)) -> None:
+                 agopenweb_origin: tuple[float, float] = (33.4484, -112.0740),
+                 selftune: SelfTune | None = None) -> None:
         # The clock thread and the request handlers both touch the engine.
         self._lock = threading.RLock()
         self._log_path = log_path
@@ -53,6 +55,10 @@ class Engine:
         self._lessons_path = lessons_path
         self._agopenweb_urls = agopenweb_urls
         self._agopenweb_origin = agopenweb_origin
+        self.selftune = selftune       # the planner's self-tune; None means it is off
+        self._tuned_day: Day | None = None  # the day already recorded, so it is recorded once
+        if selftune is not None:
+            selftune.apply()
         self.day: Day | None = None
         self._chart: tuple[str, dict] | None = None  # cached learning chart for the loaded farm
         self.running = False
@@ -143,6 +149,21 @@ class Engine:
                 self.running = False
                 if self.learning is not None:
                     self.learning.save()
+                self._self_tune_after_day()
+
+    def _self_tune_after_day(self) -> None:
+        """Record the finished day once, then tune in the background so the clock never waits."""
+        if self.selftune is None or self._tuned_day is self.day:
+            return
+        self._tuned_day = day = self.day
+        self.selftune.record_day(self.scenario, self.raw, day.manual)
+        threading.Thread(target=self._run_self_tune, args=(day,), daemon=True).start()
+
+    def _run_self_tune(self, day: Day) -> None:
+        record = self.selftune.tune()
+        with self._lock:
+            if self.day is day:  # the day may have been reset while the tune ran
+                day.memory.log.append(day.now, "Planner", "self_tune", record["sentence"])
 
     @property
     def now(self) -> float:
@@ -227,9 +248,17 @@ class Engine:
                     "log": day.memory.log.lines(LOG_LINES_IN_STATE),
                     "ai": self._ai_block(),
                     "reasoning": day.desk.crew.reasoning() if day.desk else [],
+                    "selftune": self._selftune_block(),
                 },
                 "baseline": day.baseline.block(),
             }
+
+    def _selftune_block(self) -> dict | None:
+        latest = self.selftune.latest() if self.selftune is not None else None
+        if latest is None:
+            return None
+        return {"sentence": latest["sentence"], "decision": latest["decision"],
+                "current": self.selftune.settings()["idle_weight"], "days": latest["days"]}
 
     def report(self) -> dict:
         """Foreman against the baseline: same farm, same clock, same events."""
