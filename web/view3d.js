@@ -35,9 +35,10 @@ const STATUS_COLOR = { idle: "#9fb0a5", traveling: "#7fb2ff", servicing: "#f0ae4
 
 // Richer models and terrain live in web/assets. If either file is missing or
 // breaks, the plain built-in versions below are used, so the page never fails.
-const [richModels, richTerrain] = await Promise.all([
+const [richModels, richTerrain, richDressing] = await Promise.all([
   import("./assets/models.js").catch(() => null),
   import("./assets/terrain.js").catch(() => null),
+  import("./assets/dressing.js").catch(() => null),
 ]);
 function attempt(make, fallback) {
   try { const made = make(); if (made) return made; } catch (error) { console.warn("3D view: using the plain version.", error); }
@@ -247,7 +248,7 @@ function buildFarm(farm) {
     label.center.set(0.5, 1.15);
     mesh.add(label);
     world.add(mesh, flash);
-    fields[node.id] = { node, side, round, radius: side / 2, mesh, ctx, base, texture, key: "", flash, flashT: 0, S };
+    fields[node.id] = { node, side, round, radius: side / 2, mesh, ctx, base, texture, key: "", flash, flashT: 0, S, tag };
     if (round) { baseCtx.strokeStyle = "#5b4630"; baseCtx.lineWidth = 6; baseCtx.beginPath(); baseCtx.arc(S / 2, S / 2, S / 2 - 3, 0, 7); baseCtx.stroke(); ctx.drawImage(base, 0, 0); }
   }
 
@@ -255,11 +256,26 @@ function buildFarm(farm) {
   yard = buildYard(farm);
   world.add(yard);
 
+  // Farm infrastructure around the fields: tracks, head ditches, a pivot arm, windbreaks, poles.
+  if (richDressing) attempt(() => {
+    const depot = farm.nodes.find((n) => n.kind === "depot");
+    const dressing = richDressing.buildDressing({
+      fields: Object.values(fields).map((f) => ({ x: f.mesh.position.x, z: f.mesh.position.z, side: f.side, round: f.round })),
+      roads: (farm.roads || []).filter(([a, b]) => nodes[a] && nodes[b]).map(([a, b]) => {
+        const pa = nodePos(a), pb = nodePos(b);
+        return [{ x: pa.x, z: pa.z }, { x: pb.x, z: pb.z }];
+      }),
+      yard: depot ? { x: P(depot.x, depot.y).x, z: P(depot.x, depot.y).z } : { x: 0, z: 0 },
+    });
+    world.add(dressing);
+    return dressing;
+  }, () => null);
+
   if (richTerrain) attempt(() => {
     const keepOut = [];
     for (const node of farm.nodes) {
       const p = P(node.x, node.y);
-      keepOut.push({ x: p.x, z: p.z, r: node.kind === "field" ? fieldSide(node) * 0.75 + 2 : 14 });   // covers a square's corners
+      keepOut.push({ x: p.x, z: p.z, r: node.kind === "field" ? fieldSide(node) * 0.75 + 4 : 14 });   // covers a square's corners
     }
     for (const [a, b] of farm.roads || []) {
       if (!nodes[a] || !nodes[b]) continue;
@@ -277,7 +293,7 @@ function buildFarm(farm) {
   const centre = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.z * 1.3, 200);
   overview.target.copy(centre);
-  overview.position.set(centre.x + span * 0.15, span * 0.25, centre.z + span * 0.8);
+  overview.position.set(centre.x + span * 0.13, span * 0.23, centre.z + span * 0.7);
   flyTo(overview.position, overview.target, 0);
 }
 
@@ -453,7 +469,7 @@ function buildYard(farm) {
   const g = new THREE.Group();
   if (!depot) return g;
   g.position.copy(P(depot.x, depot.y));
-  const pad = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: 0xb3a48c, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -120 }));
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: 0x8f8068, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -120 }));
   pad.rotation.x = -Math.PI / 2; pad.position.y = 0.015; pad.receiveShadow = true;
   g.add(pad);
 
@@ -834,6 +850,8 @@ function follow(id) {
 }
 
 function setButtons() {
+  fleetKey = "";
+  if (state) updateHud(state);
   $("btn-follow").classList.toggle("on", followId !== null);
   $("btn-orbit").classList.toggle("on", controls.autoRotate);
 }
@@ -906,16 +924,79 @@ function applyState(next) {
     view.data = t;
     setImplement(view, t.mounted, catalog);
   }
+  const occupied = new Set(next.foreman.tractors.filter((t) => t.status !== "traveling").map((t) => t.node));
+  for (const [id, field] of Object.entries(fields)) field.tag.style.opacity = occupied.has(id) ? "0" : "1";   // the tractor's label names the field
   buildBarriers(next.farm.blocked);
   updateParked(next);
   if (lineWidth > 0) updateRoutes(next);
 
+  updateHud(next);
   $("clock").textContent = next.clock || "--:--";
   $("plan-no").textContent = next.foreman.plan_no ? `Plan ${next.foreman.plan_no}` : "";
   $("run-state").textContent = next.finished ? "Day complete" : next.running ? `Running ${next.clock_speed ?? next.speed}×` : "Paused";
   $("headline").textContent = (next.foreman.explanation || {}).headline || "No plan yet.";
   $("status").textContent = "";
   $("status").className = "";
+}
+
+// Day summary and fleet list, straight from the state's totals and tractor rows.
+let fleetKey = "";
+function updateHud(next) {
+  $("farm-name").textContent = next.farm.name ? `· ${next.farm.name}` : "";
+  const totals = next.foreman.totals || {}, jobs = next.foreman.jobs.length;
+  const kpis = [
+    ["Jobs done", `${totals.jobs_done ?? 0} of ${jobs}`, false],
+    ["On time", `${totals.on_time ?? 0}`, false],
+    ["Working share", `${Math.round(totals.working_share ?? 0)}%`, false],
+    ["Rule violations", `${totals.violations ?? 0}`, (totals.violations ?? 0) > 0],
+  ];
+  const kpiKey = JSON.stringify(kpis);
+  if ($("kpis").dataset.key !== kpiKey) {
+    $("kpis").dataset.key = kpiKey;
+    $("kpis").replaceChildren(...kpis.map(([label, value, bad]) => {
+      const item = document.createElement("span");
+      if (bad) item.className = "bad";
+      const strong = document.createElement("b");
+      strong.textContent = value;
+      item.append(label, strong);
+      return item;
+    }));
+  }
+
+  const jobById = Object.fromEntries(next.foreman.jobs.map((j) => [j.id, j]));
+  const rows = next.foreman.tractors.map((t) => {
+    const job = t.job ? jobById[t.job] : null, field = job && nodes[job.field] ? nodes[job.field].name || job.field : "";
+    const what = t.status === "broken" ? "broken down" : job ? `${t.status}: ${job.type} ${field}` : t.status;
+    return [t.id, t.name, t.color, what, t.fuel_pct, t.status, selectedId === t.id];
+  });
+  const key = JSON.stringify(rows);
+  if (key === fleetKey) return;
+  fleetKey = key;
+  $("fleet-rows").replaceChildren(...rows.map(([id, name, color, what, fuel, status, on]) => {
+    const row = document.createElement("button");
+    row.className = "fleet-row" + (on ? " on" : "");
+    row.onclick = () => follow(id);
+    const dot = document.createElement("span"); dot.className = "dot"; dot.style.background = color;
+    const label = document.createElement("span"); label.textContent = name;
+    const state = document.createElement("span"); state.className = "what"; state.textContent = what;
+    state.style.color = status === "broken" ? "var(--danger)" : "";
+    const bar = document.createElement("span"); bar.className = "bar";
+    const fill = document.createElement("span"); fill.style.width = `${clamp(fuel, 0, 100)}%`;
+    fill.style.background = fuel < 25 ? "var(--danger)" : fuel < 60 ? "var(--accent)" : "var(--good)";
+    bar.append(fill);
+    row.append(dot, label, state, bar);
+    return row;
+  }));
+}
+
+// A true scale bar for the ground at the point the camera looks at.
+const SCALE_STEPS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+function updateScaleBar(distance) {
+  const metresPerPixel = (2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / window.innerHeight) / M;
+  const metres = SCALE_STEPS.find((step) => step / metresPerPixel >= 90) || 5000;
+  const text = metres >= 1000 ? `${metres / 1000} km` : `${metres} m`;
+  if ($("scalebar-text").textContent !== text) $("scalebar-text").textContent = text;
+  $("scalebar-line").style.width = `${Math.round(metres / metresPerPixel)}px`;
 }
 
 function poll() {
@@ -939,8 +1020,8 @@ function updateSun(dt) {
   sunDir.set(Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth));
   skyUniforms.sunPosition.value.copy(sunDir);
   const high = clamp(Math.sin(elevation) / 0.55, 0, 1);       // 0 at the horizon, 1 by mid-morning
-  skyUniforms.turbidity.value = 9 - 5 * high;
-  skyUniforms.rayleigh.value = 2.6 - 1.5 * high;
+  skyUniforms.turbidity.value = 9 - 6.5 * high;
+  skyUniforms.rayleigh.value = 2.6 - 1.3 * high;
   sun.color.setRGB(1, 0.72 + 0.26 * high, 0.5 + 0.46 * high);
   sun.intensity = 4.2 - 0.9 * high;          // a low sun grazes the ground, so it is driven harder
   hemi.intensity = 1.5 - 0.35 * high;
@@ -1167,9 +1248,10 @@ function frame() {
   updateTractors(dt, iconScale, time);
   updateRouteAnimation(Math.min(elapsed, 3));   // real time, so a fade still ends if the tab was in the background
   updateCard();
+  updateScaleBar(distance);
   $("scale-note").textContent = iconScale < 1.05
     ? "Everything is at true size."
-    : `Tractors drawn at ${iconScale.toFixed(0)}× and implements at ${Math.min(iconScale, MAX_IMPLEMENT_SCALE).toFixed(0)}× so they can be seen. Fields and passes are true size. Follow a tractor for true size.`;
+    : `Machines enlarged for visibility (tractors ${iconScale.toFixed(0)}×, implements ${Math.min(iconScale, MAX_IMPLEMENT_SCALE).toFixed(0)}×). Fields and passes are true size.`;
 
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);

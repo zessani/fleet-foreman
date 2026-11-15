@@ -44,6 +44,30 @@
   .tag small { font-weight: 500; color: #c3d1c8; margin-left: 6px; }
   .tag.broken { background: #5a1f1ce6; border-color: var(--danger); color: #ffd9d6; }
   .tag.broken small { color: #ffc0bd; }
+  #vignette { position: fixed; inset: 0; pointer-events: none;
+              background: radial-gradient(ellipse at 50% 45%, transparent 58%, rgba(8, 12, 10, 0.34) 100%); }
+  #brand { font-size: clamp(13px, 1.05vw, 16px); font-weight: 700; color: #c3d1c8; letter-spacing: 0.02em;
+           margin-bottom: 2px; }
+  #brand b { color: var(--accent); }
+  #kpis { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; padding-top: 8px;
+          border-top: 1px solid var(--line); font-size: clamp(13px, 1.1vw, 17px); color: #c3d1c8; }
+  #kpis b { color: var(--text); font-variant-numeric: tabular-nums; margin-left: 5px; }
+  #kpis .bad b { color: var(--danger); }
+  #fleet { right: 14px; bottom: 14px; width: min(26vw, 330px); padding: 10px 12px; }
+  #fleet h3 { margin: 0 0 6px; font-size: clamp(13px, 1.05vw, 16px); font-weight: 700; color: #c3d1c8; }
+  .fleet-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 4px 10px;
+               width: 100%; text-align: left; padding: 7px 8px; margin-top: 4px; border-radius: 6px;
+               background: #202c26; border: 1px solid #34453c; font-size: clamp(14px, 1.2vw, 18px); }
+  .fleet-row.on { border-color: var(--accent); }
+  .fleet-row .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .fleet-row .what { color: #c3d1c8; font-size: 0.86em; }
+  .fleet-row .bar { grid-column: 2 / 4; height: 5px; border-radius: 3px; background: #3b4d43; overflow: hidden; }
+  .fleet-row .bar span { display: block; height: 100%; background: var(--good); }
+  #scalebar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); pointer-events: none;
+              text-align: center; font-size: clamp(12px, 1vw, 15px); font-weight: 700; color: #fff;
+              text-shadow: 0 1px 3px #000c; }
+  #scalebar div { height: 6px; margin-top: 3px; border: 2px solid #fff; border-top: none;
+                  box-shadow: 0 1px 3px #0008; }
   .fieldtag { font-size: clamp(13px, 1.05vw, 16px); font-weight: 700; padding: 2px 7px; border-radius: 5px;
               background: #111714b8; color: #fff; white-space: nowrap; }
 </style>
@@ -55,16 +79,27 @@
 <canvas id="scene"></canvas>
 <div id="labels"></div>
 
+<div id="vignette"></div>
+
 <div id="readout" class="panel">
+  <div id="brand"><b>Foreman</b> <span id="farm-name"></span></div>
   <div class="row">
     <span id="clock">--:--</span>
     <span id="plan-no"></span>
     <span id="run-state"></span>
   </div>
   <div id="headline">Waiting for the farm.</div>
+  <div id="kpis"></div>
   <div id="scale-note"></div>
   <div id="status"></div>
 </div>
+
+<div id="fleet" class="panel">
+  <h3>Fleet</h3>
+  <div id="fleet-rows"></div>
+</div>
+
+<div id="scalebar"><span id="scalebar-text"></span><div id="scalebar-line"></div></div>
 
 <div id="card" class="panel">
   <button class="close" id="card-close" aria-label="Close">×</button>
