@@ -24,8 +24,8 @@ Scripted events:
 | Rule violations | 0 | 0 | +0 |
 
 Re-plan times:
-- Plan 1 at 06:00: 7.43 ms from event to new plan
-- Plan 2 at 09:30: 0.31 ms from event to new plan
+- Plan 1 at 06:00: 9.6 ms from event to new plan
+- Plan 2 at 09:30: 0.3 ms from event to new plan
 
 ## Large farm
 
@@ -51,8 +51,8 @@ Scripted events:
 | Rule violations | 0 | 0 | +0 |
 
 Re-plan times:
-- Plan 1 at 06:00: 357.39 ms from event to new plan
-- Plan 2 at 11:15: 12.58 ms from event to new plan
+- Plan 1 at 06:00: 360.7 ms from event to new plan
+- Plan 2 at 11:15: 11.58 ms from event to new plan
 
 ## All test days
 

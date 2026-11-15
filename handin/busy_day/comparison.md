@@ -21,5 +21,5 @@ Scripted events:
 | Rule violations | 0 | 0 | +0 |
 
 Re-plan times:
-- Plan 1 at 06:00: 71.71 ms from event to new plan
-- Plan 2 at 09:30: 3.94 ms from event to new plan
+- Plan 1 at 06:00: 88.0 ms from event to new plan
+- Plan 2 at 09:30: 4.45 ms from event to new plan

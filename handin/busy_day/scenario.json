@@ -209,7 +209,9 @@
       "fuel": 320,
       "burn_km": 0.6,
       "burn_work": 0.45,
-      "node": "YARD"
+      "node": "YARD",
+      "breakdown_risk_per_hour": 0.015,
+      "typical_repair_min": 45
     },
     {
       "id": "T2",
@@ -225,7 +227,9 @@
       "fuel": 220,
       "burn_km": 0.5,
       "burn_work": 0.35,
-      "node": "YARD"
+      "node": "YARD",
+      "breakdown_risk_per_hour": 0.01,
+      "typical_repair_min": 30
     },
     {
       "id": "T3",
@@ -242,7 +246,9 @@
       "fuel": 280,
       "burn_km": 0.55,
       "burn_work": 0.4,
-      "node": "YARD"
+      "node": "YARD",
+      "breakdown_risk_per_hour": 0.04,
+      "typical_repair_min": 60
     }
   ],
   "jobs": [

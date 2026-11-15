@@ -1,10 +1,10 @@
 {"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "jobs_submitted", "message": "18 jobs submitted by the operator."}
 {"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "route", "message": "jobs_submitted: Planner, Route finder, Safety gate, dispatch.", "data": {"route": ["Planner", "Route finder", "Safety gate"]}}
 {"t": 0.0, "clock": "06:00", "agent": "Planner", "event": "implements", "message": "Implement picker checked 18 job(s) against 3 tractor(s)."}
-{"t": 0.0, "clock": "06:00", "agent": "Planner", "event": "plan", "message": "Planned 18 job(s) across 3 tractor(s) in 71.5 ms.", "data": {"planner_ms": 71.48, "planned": 18}}
+{"t": 0.0, "clock": "06:00", "agent": "Planner", "event": "plan", "message": "Planned 18 job(s) across 3 tractor(s) in 87.8 ms. The cheapest operating plan was also the best resilient alternative.", "data": {"planner_ms": 87.75, "planned": 18, "resilience": {"enabled": true, "operating_tolerance_pct": 5.0, "resilience_weight_pct": 10.0, "minimum_resilience_gain_pct": 5.0, "best_operating_cost": 43315.46, "selected_operating_cost": 43315.46, "operating_increase_pct": 0.0, "resilience_before": 49805.65, "resilience_after": 49805.65, "resilience_improvement_pct": 0.0, "alternatives_evaluated": 17, "changed": false}}}
 {"t": 0.0, "clock": "06:00", "agent": "Route finder", "event": "routes", "message": "18 route(s) set, 84.6 km of road travel. No two tractors are in the same field at once.", "data": {"km": 84.6}}
 {"t": 0.0, "clock": "06:00", "agent": "Safety gate", "event": "plan_passed", "message": "Safety gate passed 8 of 9 checks. Warning: J13 on T1 is 188 min late; J15 on T2 is 55 min late; J10 on T2 is 141 min late; J9 on T3 is 183 min late"}
-{"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "dispatch", "message": "Plan 1 sent to Atlas, Bolt, Cedar. 0 moved, 0 stayed with their tractor. Event to dispatch: 71.7 ms.", "data": {"plan_no": 1, "ms": 71.71}}
+{"t": 0.0, "clock": "06:00", "agent": "Orchestrator", "event": "dispatch", "message": "Plan 1 sent to Atlas, Bolt, Cedar. 0 moved, 0 stayed with their tractor. Event to dispatch: 88.0 ms.", "data": {"plan_no": 1, "ms": 88.0}}
 {"t": 4.29, "clock": "06:04", "agent": "Recovery monitor", "event": "job_started", "message": "Atlas started: Till West Bench."}
 {"t": 5.67, "clock": "06:05", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Spray North 40."}
 {"t": 47.34, "clock": "06:47", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Spray North 40."}
@@ -26,10 +26,10 @@
 {"t": 210.0, "clock": "09:30", "agent": "Planner", "event": "implements", "message": "Implement picker, Plant West Bench: Atlas can pull the 8 m row planter; Bolt has no plant implement; Cedar is out of service.", "data": {"job": "J5"}}
 {"t": 210.0, "clock": "09:30", "agent": "Planner", "event": "implements", "message": "Implement picker, Plant South Pivot: Atlas can pull the 8 m row planter; Bolt has no plant implement; Cedar is out of service.", "data": {"job": "J7"}}
 {"t": 210.0, "clock": "09:30", "agent": "Planner", "event": "implements", "message": "Implement picker, Mow Canal Strip: Atlas can pull the 6 m disc mower; Bolt can pull the 6 m disc mower; Cedar is out of service.", "data": {"job": "J9"}}
-{"t": 210.0, "clock": "09:30", "agent": "Planner", "event": "plan", "message": "Planned 11 job(s) across 2 tractor(s) in 3.8 ms. Kept the other tractors' work in place.", "data": {"planner_ms": 3.79, "planned": 11}}
+{"t": 210.0, "clock": "09:30", "agent": "Planner", "event": "plan", "message": "Planned 11 job(s) across 2 tractor(s) in 4.3 ms. Kept the other tractors' work in place.", "data": {"planner_ms": 4.28, "planned": 11, "resilience": {}}}
 {"t": 210.0, "clock": "09:30", "agent": "Route finder", "event": "routes", "message": "11 route(s) set, 53.9 km of road travel. No two tractors are in the same field at once.", "data": {"km": 53.86}}
 {"t": 210.0, "clock": "09:30", "agent": "Safety gate", "event": "plan_passed", "message": "Safety gate passed 8 of 9 checks. Warning: J7 on T1 is 152 min late; J5 on T1 is 318 min late; J13 on T1 is 518 min late; J9 on T2 is 145 min late; J8 on T2 is 314 min late"}
-{"t": 210.0, "clock": "09:30", "agent": "Orchestrator", "event": "dispatch", "message": "Plan 2 sent to Atlas, Bolt. 3 moved, 8 stayed with their tractor. Event to dispatch: 3.9 ms.", "data": {"plan_no": 2, "ms": 3.94}}
+{"t": 210.0, "clock": "09:30", "agent": "Orchestrator", "event": "dispatch", "message": "Plan 2 sent to Atlas, Bolt. 3 moved, 8 stayed with their tractor. Event to dispatch: 4.5 ms.", "data": {"plan_no": 2, "ms": 4.45}}
 {"t": 219.59, "clock": "09:39", "agent": "Recovery monitor", "event": "job_started", "message": "Bolt started: Mow Mesquite Corner."}
 {"t": 265.4, "clock": "10:25", "agent": "Recovery monitor", "event": "job_done", "message": "Atlas finished: Till South Pivot."}
 {"t": 270.01, "clock": "10:30", "agent": "Recovery monitor", "event": "job_done", "message": "Bolt finished: Mow Mesquite Corner."}
