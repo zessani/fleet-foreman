@@ -1618,14 +1618,18 @@ if (fpsBox) {
     + "background:#111714eb;color:#fff;font:700 15px system-ui;";
   document.body.append(fpsBox);
 }
-let fpsFrames = 0, fpsSince = performance.now();
+let fpsFrames = 0, fpsSince = performance.now(), fpsWhole = false;
 const fpsLog = [];
+// A second that includes going to or coming from the background is not a fair sample.
+document.addEventListener("visibilitychange", () => { fpsFrames = 0; fpsSince = performance.now(); fpsWhole = false; });
 function countFrame() {
   fpsFrames++;
   const now = performance.now();
   if (now - fpsSince < 1000) return;
   window.foremanView.fps = Math.round(fpsFrames * 1000 / (now - fpsSince));
-  if (document.visibilityState === "visible" && state) {
+  const whole = fpsWhole;
+  fpsWhole = true;
+  if (document.visibilityState === "visible" && state && whole) {
     // Written only while this page is in front, so a reading can be read back from another tab.
     fpsLog.push({ fps: window.foremanView.fps, running: !!state.running });
     if (fpsLog.length > 120) fpsLog.shift();
