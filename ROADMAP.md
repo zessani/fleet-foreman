@@ -84,10 +84,10 @@ Goal: the numbers and finish that make it feel like a real product.
 - [x] Map polish
 
 ### Vishva
-- [ ] Accuracy chart
-- [ ] "Why?" panel
+- [x] Accuracy chart
+- [x] "Why?" panel
 - [ ] Screenshots and numbers in the deck
-- [ ] README finished
+- [x] README finished
 
 **Merge 3 at 4:00. Fixes only after this.**
 

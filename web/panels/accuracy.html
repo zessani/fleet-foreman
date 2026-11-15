@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foreman accuracy</title>
+<style>
+  body { margin: 0; padding: 16px; background: #111714; }
+</style>
+</head>
+<body>
+<!--
+  Test page for the accuracy chart.
+  Live data:  http://localhost:8000/panels/accuracy.html
+  Demo data:  http://localhost:8000/panels/accuracy.html?demo=1
+-->
+<div id="accuracy-panel" style="max-width: 760px"></div>
+<script>
+  if (new URLSearchParams(location.search).get("demo") === "1") window.ACCURACY_PANEL_DEMO = true;
+</script>
+<script src="accuracy.js"></script>
+</body>
+</html>
