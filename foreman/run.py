@@ -27,6 +27,7 @@ class Run:
         self.plan_no = 0                 # counts up with every dispatched plan
         self.rows: dict[str, dict] = {}  # job id -> its latest plan row, kept after it is done
         self.explanation: dict = {}
+        self.explanations: list[dict] = []  # every plan change of the day, oldest first
         self.safety: dict = {"passed": None, "checks": []}
         self.replans: list[dict] = []    # one record per dispatched plan, for the proof run
         self.speed_factor = None         # learned work-rate factors, when the learning loop is on

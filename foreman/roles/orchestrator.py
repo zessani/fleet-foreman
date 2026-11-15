@@ -96,6 +96,7 @@ class Orchestrator(Role):
         if cycle.events[0].get("headline"):
             story["headline"] = cycle.events[0]["headline"]
         run.explanation = story
+        run.explanations.append({"t": round(run.now, 2), "plan_no": run.plan_no, **story})
         run.safety = cycle.safety.to_dict()
         run.replans.append({
             "t": round(run.now, 2), "plan_no": run.plan_no, "ms": round(ms, 2),
