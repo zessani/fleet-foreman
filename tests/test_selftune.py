@@ -10,8 +10,8 @@ import pytest
 
 from foreman import evaluator, planner, safety
 from foreman.engine import Engine
-from foreman.selftune import (DEFAULTS, MIN_DAYS, TUNABLE, SelfTune, candidate_settings, candidates, choose,
-                              trial)
+from foreman.selftune import (DEFAULTS, MIN_DAYS, MIN_HELD_OUT, MIN_TUNING, TUNABLE, SelfTune, candidate_settings,
+                              candidates, choose, split_days, trial)
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE = ROOT / "scenarios" / "example_farm.json"
@@ -60,8 +60,8 @@ def test_fewer_than_min_days_keeps_the_setting() -> None:
     tuner = filled(2)
     record = tuner.tune()
     assert record["decision"] == "kept" and record["tried"] == []
-    assert "needs 5 past days" in record["reason"] and "it has 2" in record["sentence"]
-    assert tuner.settings() == DEFAULTS and MIN_DAYS == 5
+    assert "needs 6 past days" in record["reason"] and "it has 2" in record["sentence"]
+    assert tuner.settings() == DEFAULTS and MIN_DAYS == 6
 
 
 def test_choose_adopts_a_candidate_better_on_both() -> None:
@@ -149,7 +149,7 @@ def test_engine_records_one_day_and_exposes_the_sentence() -> None:
     while engine.state()["foreman"]["selftune"] is None and time.monotonic() < deadline:
         time.sleep(0.05)
     block = engine.state()["foreman"]["selftune"]
-    assert block["days"] == 1 and "needs 5 past days" in block["sentence"]
+    assert block["days"] == 1 and "needs 6 past days" in block["sentence"]
     assert block["decision"] == "kept" and block["current"] == DEFAULTS
     assert tuner.day_count() == 1
 
@@ -253,3 +253,130 @@ def test_reset_returns_stability_settings_to_the_defaults() -> None:
     tuner.tune(score=stability_winner("stability_light", 5.0))
     assert planner.CHANGE_LIGHT == 5.0
     assert tuner.reset() == DEFAULTS and planner.CHANGE_LIGHT == 15.0
+
+
+# the held-out check
+
+def split_scorer(tuning_days: int, tuning_result: tuple, held_result: tuple, name: str = "idle_weight",
+                 value: float = 1.0):
+    """Fake scores. The current settings get (10, 100). The winner gets one result on the tuning
+    days and another on the held-out days, told apart by how many days it was given."""
+    calls: list = []
+
+    def fake(settings: dict, days: list) -> dict:
+        calls.append((dict(settings), len(days)))
+        if settings == DEFAULTS or settings[name] != value:
+            return score(settings, 10, 100.0)
+        on_time, wasted = tuning_result if len(days) == tuning_days else held_result
+        return score(settings, on_time, wasted)
+
+    fake.calls = calls
+    return fake
+
+
+def test_split_is_repeatable_and_never_overlaps() -> None:
+    for count in range(0, 15):
+        tuning, held = split_days(count)
+        assert (tuning, held) == split_days(count)
+        assert not set(tuning) & set(held) and sorted(tuning + held) == list(range(count))
+    assert split_days(9) == ([0, 1, 3, 4, 6, 7], [2, 5, 8])
+
+
+def test_minimum_history_leaves_enough_days_on_both_sides() -> None:
+    tuning, held = split_days(MIN_DAYS)
+    assert (len(tuning), len(held)) == (4, 2) and MIN_DAYS == 6
+    assert len(held) >= MIN_HELD_OUT and len(tuning) >= MIN_TUNING
+    assert len(split_days(MIN_DAYS - 1)[1]) < MIN_HELD_OUT
+
+
+def test_too_few_days_adopts_nothing_and_says_how_many_more() -> None:
+    tuner = filled(MIN_DAYS - 1)
+    record = tuner.tune(score=split_scorer(4, (12, 80.0), (12, 80.0)))
+    assert record["decision"] == "kept" and record["tried"] == [] and record["tuning"] is None
+    assert "it has 5, so it needs 1 more" in record["sentence"] and "4 to tune on, 2 held out" in record["sentence"]
+    assert tuner.settings() == DEFAULTS
+
+
+def test_a_tuning_winner_that_loses_on_held_out_days_is_not_adopted() -> None:
+    tuner = filled(MIN_DAYS)
+    record = tuner.tune(score=split_scorer(4, (12, 80.0), (10, 103.0)))
+    assert record["decision"] == "kept" and record["adopted"] is None
+    assert tuner.settings() == DEFAULTS and evaluator.W_WAIT == 0.7
+    assert "did not hold on the 2 held-out days (3% more wasted minutes)" in record["sentence"]
+    assert "every setting stays as it was" in record["sentence"]
+    assert record["rejected"]["idle_weight"] == 1.0
+
+
+def test_a_tuning_winner_that_loses_jobs_on_held_out_days_is_not_adopted() -> None:
+    tuner = filled(MIN_DAYS)
+    record = tuner.tune(score=split_scorer(4, (12, 80.0), (9, 50.0)))
+    assert record["decision"] == "kept" and "1 fewer job on time" in record["sentence"]
+
+
+def test_a_tuning_winner_that_only_ties_on_held_out_days_is_not_adopted() -> None:
+    tuner = filled(MIN_DAYS)
+    for tie in ((10, 100.0), (10, 99.5)):
+        record = tuner.tune(score=split_scorer(4, (12, 80.0), tie))
+        assert record["decision"] == "kept" and "no clear gain" in record["sentence"]
+
+
+def test_a_tuning_winner_with_a_held_out_violation_is_not_adopted() -> None:
+    tuner = filled(MIN_DAYS)
+    base = split_scorer(4, (12, 80.0), (12, 80.0))
+
+    def fake(settings: dict, days: list) -> dict:
+        if settings["idle_weight"] == 1.0 and len(days) == 2:
+            return score(settings, 15, 10.0, violations=1)
+        return base(settings, days)
+
+    record = tuner.tune(score=fake)
+    assert record["decision"] == "kept" and "1 rule violations" in record["sentence"]
+
+
+def test_a_winner_that_also_wins_on_held_out_days_is_adopted() -> None:
+    tuner = filled(MIN_DAYS)
+    record = tuner.tune(score=split_scorer(4, (12, 84.0), (10, 89.0)))
+    assert record["decision"] == "adopted" and record["adopted"]["idle_weight"] == 1.0
+    assert tuner.settings()["idle_weight"] == 1.0 and evaluator.W_WAIT == 1.0
+    assert record["sentence"].startswith("Self-tune tried 9 settings on 4 past days and checked the best one on "
+                                         "2 days it had not tuned on.")
+    assert "2 more jobs on time, 16% fewer wasted minutes on the tuning days" in record["sentence"]
+    assert "11% fewer wasted minutes on the held-out days" in record["sentence"]
+    assert "no fewer jobs on time, zero rule violations" in record["sentence"]
+
+
+def test_the_record_carries_both_score_blocks() -> None:
+    tuner = filled(MIN_DAYS)
+    record = tuner.tune(score=split_scorer(4, (12, 84.0), (10, 89.0)))
+    for block, days, winner in (("tuning", 4, (12, 84.0)), ("held_out", 2, (10, 89.0))):
+        assert record[block]["days"] == days
+        assert record[block]["current"]["settings"] == DEFAULTS
+        assert (record[block]["winner"]["on_time"], record[block]["winner"]["wasted"]) == winner
+        for who in ("current", "winner"):
+            assert {"on_time", "wasted", "violations"} <= set(record[block][who])
+
+
+def test_no_tuning_winner_means_the_held_out_days_are_never_touched() -> None:
+    tuner = filled(MIN_DAYS)
+    fake = split_scorer(4, (10, 100.0), (10, 100.0))
+    record = tuner.tune(score=fake)
+    assert record["decision"] == "kept" and record["held_out"] is None
+    assert all(days == 4 for _, days in fake.calls)
+
+
+def test_only_the_single_winner_is_scored_on_the_held_out_days() -> None:
+    tuner = filled(MIN_DAYS)
+    fake = split_scorer(4, (12, 84.0), (10, 89.0))
+    tuner.tune(score=fake)
+    on_held = [settings for settings, days in fake.calls if days == 2]
+    assert len(on_held) == 2 and on_held[0] == DEFAULTS and on_held[1]["idle_weight"] == 1.0
+    assert sum(1 for _, days in fake.calls if days == 4) == len(candidate_settings(DEFAULTS))
+
+
+def test_the_state_block_keys_are_unchanged() -> None:
+    engine = Engine(EXAMPLE, selftune=SelfTune(None))
+    engine.advance(engine.day.farm.horizon_min)
+    deadline = time.monotonic() + 15
+    while engine.state()["foreman"]["selftune"] is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert set(engine.state()["foreman"]["selftune"]) == {"sentence", "decision", "current", "days"}

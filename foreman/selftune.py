@@ -4,8 +4,10 @@ No model and no network are involved. At the end of a day, Foreman replays the d
 it has already run with candidate settings (the allow-list TUNABLE: the idle weight and
 the two stability costs, one changed at a time), using the same sweep code as `python -m foreman.sweep`. A candidate is adopted only
 if it finishes at least as many jobs on time, wastes no more minutes, is strictly
-better on one of the two, and breaks no rule. It never adopts anything on fewer than
-MIN_DAYS past days.
+better on one of the two, and breaks no rule. Held-out check: the past days are split by
+position (every third day is held out). Candidates are scored, and the winner picked, on the
+tuning days only. The single winner is then scored once on the held-out days and adopted only
+if it wins there too by the same rule. It never adopts anything on fewer than MIN_DAYS past days.
 
 Commands:  python -m foreman.selftune report [--days N] [--save]
            python -m foreman.selftune farms
@@ -27,7 +29,9 @@ from typing import Callable
 from foreman import evaluator, planner, sweep
 
 ROOT = Path(__file__).resolve().parent.parent
-MIN_DAYS = 5          # never adopt on fewer past days than this
+HELD_EVERY = 3        # every third past day (the 3rd, 6th, 9th ...) is held out
+MIN_HELD_OUT = 2      # a held-out check on one day would be too thin
+MIN_TUNING = 3        # and so would tuning on fewer than three
 HISTORY_KEPT = 12     # replay at most the latest days, so a tune stays fast
 WASTE_NOISE = 0.01    # wasted minutes must drop by at least 1% to count as better
 
@@ -137,21 +141,70 @@ def choose(current_score: dict, candidate_scores: list[dict]) -> dict | None:
     return min(winners, key=lambda s: (-s["on_time"], s["wasted"], _distance(s, current_score["settings"])))
 
 
+def split_days(count: int) -> tuple[list[int], list[int]]:
+    """Positions of the tuning days and of the held-out days. Fixed by position, never by score."""
+    held = [k for k in range(count) if k % HELD_EVERY == HELD_EVERY - 1]
+    return [k for k in range(count) if k not in held], held
+
+
+def _enough_days(count: int) -> bool:
+    tuning, held = split_days(count)
+    return len(held) >= MIN_HELD_OUT and len(tuning) >= MIN_TUNING
+
+
+# The smallest history that leaves enough days on both sides: 6 days (4 to tune on, 2 held out).
+MIN_DAYS = next(n for n in range(1, 100) if _enough_days(n))
+HISTORY_KEPT = max(HISTORY_KEPT, MIN_DAYS)
+
+
 def _percent_less(before: float, after: float) -> int:
     return round(100 * (before - after) / before) if before else 0
 
 
-def _adopted_sentence(days: int, old: dict, new: dict) -> str:
-    name = changed_setting(old["settings"], new["settings"])
-    gain = new["on_time"] - old["on_time"]
+def _gain_phrase(old: dict, new: dict) -> str:
     parts = []
+    gain = new["on_time"] - old["on_time"]
     if gain:
         parts.append(f"{gain} more job{'s' if gain != 1 else ''} on time")
-    if _wasted_better(new, old):
+    if new["wasted"] < old["wasted"]:
         parts.append(f"{_percent_less(old['wasted'], new['wasted'])}% fewer wasted minutes")
-    return (f"Self-tune replayed {days} past days and moved {TUNABLE[name]['label']} from "
-            f"{old['settings'][name]:g} to {new['settings'][name]:g}: {' and '.join(parts)}, "
-            "zero rule violations.")
+    return ", ".join(parts) or "no change"
+
+
+def _lead(tried: int, tuning_days: int, held_days: int) -> str:
+    return (f"Self-tune tried {tried} settings on {tuning_days} past days and checked the best one on "
+            f"{held_days} days it had not tuned on.")
+
+
+def _adopted_sentence(tried: int, tuning: dict, held: dict) -> str:
+    name = changed_setting(tuning["current"]["settings"], tuning["winner"]["settings"])
+    old_value = tuning["current"]["settings"][name]
+    new_value = tuning["winner"]["settings"][name]
+    return (f"{_lead(tried, tuning['days'], held['days'])} It moved {TUNABLE[name]['label']} from "
+            f"{old_value:g} to {new_value:g}: {_gain_phrase(tuning['current'], tuning['winner'])} on the "
+            f"tuning days and {_gain_phrase(held['current'], held['winner'])} on the held-out days, "
+            "no fewer jobs on time, zero rule violations.")
+
+
+def _held_out_failure(winner: dict, current: dict) -> str:
+    """Why the winner did not hold on the held-out days, in plain words."""
+    if winner["violations"] > 0:
+        return f"{winner['violations']} rule violations"
+    if winner["on_time"] < current["on_time"]:
+        lost = current["on_time"] - winner["on_time"]
+        return f"{lost} fewer job{'s' if lost != 1 else ''} on time"
+    if winner["wasted"] > current["wasted"]:
+        return f"{_percent_less(current['wasted'], winner['wasted']) * -1}% more wasted minutes"
+    return "no clear gain, a tie within 1%"
+
+
+def _rejected_sentence(tried: int, tuning: dict, held: dict) -> str:
+    winner = tuning["winner"]
+    name = changed_setting(tuning["current"]["settings"], winner["settings"])
+    return (f"{_lead(tried, tuning['days'], held['days'])} The best one on the tuning days "
+            f"({TUNABLE[name]['label']} {winner['settings'][name]:g}) did not hold on the "
+            f"{held['days']} held-out days ({_held_out_failure(held['winner'], held['current'])}), "
+            "so every setting stays as it was.")
 
 
 def score_settings(settings: dict, days: list[tuple[str, str, dict]]) -> dict:
@@ -231,37 +284,60 @@ class SelfTune:
     # tuning
 
     def tune(self, score: Callable[[dict, list], dict] | None = None) -> dict:
-        """Replay the past days with each candidate, then adopt or keep. Logs one record."""
+        """Pick a winner on the tuning days, test it once on the held-out days, then adopt or keep."""
         score = score or score_settings
         current = self.settings()
         count = len(self._days)
         record = {"at": self._stamp(), "days": count, "current": current, "tried": [],
-                  "decision": "kept", "adopted": None, "changed": None}
-        if count < MIN_DAYS:
-            record["reason"] = f"Self-tune needs {MIN_DAYS} past days before it changes anything; it has {count}."
+                  "decision": "kept", "adopted": None, "changed": None, "tuning": None, "held_out": None}
+        if not _enough_days(count):
+            tuning_n, held_n = (len(part) for part in split_days(MIN_DAYS))
+            record["reason"] = (f"Self-tune needs {MIN_DAYS} past days ({tuning_n} to tune on, {held_n} held out) "
+                                f"before it changes anything; it has {count}, so it needs {MIN_DAYS - count} more.")
             record["sentence"] = record["reason"]
             return self._write_log(record)
 
-        days = self._replay_days()
+        tuning_at, held_at = split_days(count)
+        everything = self._replay_days()
+        tuning_days = [everything[k] for k in tuning_at]
+        held_days = [everything[k] for k in held_at]
         with constants_kept():
-            record["tried"] = [score(settings, days) for settings in candidate_settings(current)]
+            record["tried"] = [score(settings, tuning_days) for settings in candidate_settings(current)]
         old = record["tried"][0]
         winner = choose(old, record["tried"][1:])
+        record["tuning"] = {"days": len(tuning_days), "current": old, "winner": winner}
         if winner is None:
             record["reason"] = ("No candidate finished more jobs on time with fewer wasted minutes "
-                                "and zero rule violations.")
-            record["sentence"] = (f"Self-tune replayed {count} past days with {len(record['tried'])} settings "
+                                "and zero rule violations on the tuning days.")
+            record["sentence"] = (f"Self-tune tried {len(record['tried'])} settings on {len(tuning_days)} past days "
                                   "and kept every setting as it was: no candidate finished more "
                                   "jobs on time with fewer wasted minutes.")
         else:
+            self._test_held_out(record, score, held_days)
+        self.apply()
+        return self._write_log(record)
+
+    def _test_held_out(self, record: dict, score: Callable, held_days: list) -> None:
+        """Score only the winner (and the current settings) on days it never tuned on."""
+        old, winner = record["tuning"]["current"], record["tuning"]["winner"]
+        with constants_kept():
+            held_old = score(old["settings"], held_days)
+            held_new = score(winner["settings"], held_days)
+        held = {"days": len(held_days), "current": held_old, "winner": held_new}
+        record["held_out"] = held
+        tried = len(record["tried"])
+        if beats(held_new, held_old):
             self._settings = dict(winner["settings"])
             self._save_settings()
             record.update(decision="adopted", adopted=dict(winner["settings"]),
-                          changed=changed_setting(current, winner["settings"]))
-            record["sentence"] = _adopted_sentence(count, old, winner)
+                          changed=changed_setting(record["current"], winner["settings"]))
+            record["sentence"] = _adopted_sentence(tried, record["tuning"], held)
             record["reason"] = record["sentence"]
-        self.apply()
-        return self._write_log(record)
+        else:
+            record["rejected"] = dict(winner["settings"])
+            record["sentence"] = _rejected_sentence(tried, record["tuning"], held)
+            record["reason"] = ("The winner on the tuning days did not also win on the held-out days: "
+                                + _held_out_failure(held_new, held_old) + ".")
 
     def latest(self) -> dict | None:
         return self._log[-1] if self._log else None
@@ -350,27 +426,36 @@ def _show(settings: dict) -> str:
 
 
 def _adoption(day: int, record: dict) -> dict:
-    old = record["tried"][0]
-    new = next(t for t in record["tried"] if t["settings"] == record["adopted"])
     name = record["changed"]
+    tuning, held = record["tuning"], record["held_out"]
     return {"day": day, "setting": name, "from": record["current"][name], "to": record["adopted"][name],
-            "before": old, "after": new}
+            "before": tuning["current"], "after": tuning["winner"],
+            "tuning_days": tuning["days"], "held_days": held["days"],
+            "held_before": held["current"], "held_after": held["winner"]}
+
+
+def _scores(label: str, before: dict, after: dict) -> str:
+    return (f"{label}: before {before['on_time']} on time, {before['wasted']:,.0f} wasted minutes; "
+            f"after {after['on_time']} on time, {after['wasted']:,.0f} wasted minutes")
 
 
 def _adoption_lines(adoptions: list[dict], nothing: str) -> str:
     if not adoptions:
         return f"Nothing was adopted: {nothing}."
     return "\n".join(
-        f"After day {a['day']}: {a['setting']} moved from {a['from']:g} to {a['to']:g}. Replay before: "
-        f"{a['before']['on_time']} on time, {a['before']['wasted']:.0f} wasted minutes. "
-        f"After: {a['after']['on_time']} on time, {a['after']['wasted']:.0f} wasted minutes."
+        f"After day {a['day']}: {a['setting']} moved from {a['from']:g} to {a['to']:g}. "
+        f"{_scores('Tuning days', a['before'], a['after'])}. "
+        f"{_scores('Held-out days', a['held_before'], a['held_after'])}."
         for a in adoptions)
 
 
-# One quiet day, then five days where one tractor breaks. Tractors take turns in farm order
+# One quiet day, then eight days where one tractor breaks. Tractors take turns in farm order
 # and the minutes are fixed, so the run is the same every time. A stability cost only
 # matters when there is a re-plan, which a breakdown forces.
-FARM_HISTORY_BREAKS = (45, 100, 70, 140, 180)
+FARM_HISTORY_BREAKS = (45, 100, 70, 140, 180, 230, 20, 120)
+# Four more days that are never in the history: the tractors start one place later in the
+# farm order and the minutes are ones the history never used.
+UNSEEN_BREAKS = (60, 90, 160, 210)
 FARM_NAMES = ("large_farm", "random_101", "random_102", "random_103")
 
 
@@ -383,37 +468,81 @@ def _history_farm(name: str) -> dict:
     return raw
 
 
-def farm_history(raw: dict) -> list[dict]:
-    """Six days of the same farm: quiet, then one tractor breaking at a fixed minute each day."""
-    history = [copy.deepcopy(raw)]
+def _breakdown_days(raw: dict, minutes: tuple[int, ...], first_tractor: int) -> list[dict]:
     tractors = [t["id"] for t in raw["tractors"]]
-    for k, minute in enumerate(FARM_HISTORY_BREAKS):
+    days = []
+    for k, minute in enumerate(minutes):
         day = copy.deepcopy(raw)
-        day["events"] = [{"at": minute, "type": "breakdown", "tractor": tractors[k % len(tractors)]}]
-        history.append(day)
-    return history
+        day["events"] = [{"at": minute, "type": "breakdown", "tractor": tractors[(first_tractor + k) % len(tractors)]}]
+        days.append(day)
+    return days
+
+
+def farm_history(raw: dict) -> list[dict]:
+    """Nine days of the same farm: quiet, then one tractor breaking at a fixed minute each day."""
+    return [copy.deepcopy(raw)] + _breakdown_days(raw, FARM_HISTORY_BREAKS, 0)
+
+
+def unseen_days(raw: dict) -> list[dict]:
+    return _breakdown_days(raw, UNSEEN_BREAKS, 1)
+
+
+def _held_out_verdict(adoptions: list[dict], rejected: int) -> str:
+    """One plain line: did a gain hold on the days the tune did not see?"""
+    if adoptions:
+        held = [f"{_gain_phrase(a['held_before'], a['held_after'])} (after day {a['day']})" for a in adoptions]
+        return "Gain held on the held-out days: " + "; ".join(held) + "."
+    if rejected:
+        return (f"No gain held: {rejected} setting{'s' if rejected != 1 else ''} won on the tuning days "
+                "and lost or tied on the held-out days, so nothing was adopted.")
+    return "No gain to check: no setting beat the defaults even on the tuning days."
+
+
+def _never_seen(raw: dict, final: dict, out) -> dict:
+    """Final settings against the defaults on days that were never in the history."""
+    days = [("unseen", "replay", day) for day in unseen_days(raw)]
+    with constants_kept():
+        mine, default = score_settings(final, days), score_settings(dict(DEFAULTS), days)
+    out(f"  never-seen {len(days)} days, final settings: {mine['on_time']} on time, {mine['wasted']:,.0f} wasted minutes")
+    out(f"  never-seen {len(days)} days, default settings: {default['on_time']} on time, "
+        f"{default['wasted']:,.0f} wasted minutes")
+    return {"final": mine, "default": default}
 
 
 def run_farm_report(name: str, out=print) -> dict:
-    """Six days on one farm, each planned with the settings current then, self-tuning after each."""
+    """Nine days on one farm, each planned with the settings current then, self-tuning after each."""
     began = time.monotonic()
     tuner = SelfTune(None)  # in memory only: the saved settings in runs/ are never touched
     tuner.reset()
     started = tuner.settings()
-    adoptions = []
-    for k, raw in enumerate(farm_history(_history_farm(name))):
+    raw_farm = _history_farm(name)
+    adoptions, rejected = [], 0
+    out(f"{name}\n  started with {_show(started)}")
+    for k, raw in enumerate(farm_history(raw_farm)):
         _run_one(raw, tuner.settings())  # the day as it ran, with the settings current at that moment
         tuner.record_day(f"{name} day {k + 1}", raw, [])
         record = tuner.tune()
+        if record["held_out"] is None:
+            continue
+        tuning, held = record["tuning"], record["held_out"]
+        verdict = "ADOPTED" if record["decision"] == "adopted" else "REJECTED"
+        changed = changed_setting(tuning["current"]["settings"], tuning["winner"]["settings"])
+        out(f"  after day {k + 1} (tuned on {tuning['days']} days, held out {held['days']}): {verdict} "
+            f"{changed} {tuning['current']['settings'][changed]:g} to {tuning['winner']['settings'][changed]:g}")
+        out("    " + _scores("tuning days", tuning["current"], tuning["winner"]))
+        out("    " + _scores("held-out days", held["current"], held["winner"]))
         if record["decision"] == "adopted":
             adoptions.append(_adoption(k + 1, record))
+        else:
+            rejected += 1
+    verdict_line = _held_out_verdict(adoptions, rejected)
+    out(f"  {verdict_line}")
+    out(f"  final settings: {_show(tuner.settings())}")
+    unseen = _never_seen(raw_farm, tuner.settings(), out)
     seconds = round(time.monotonic() - began, 1)
-    out(f"{name}\n  started with {_show(started)}")
-    for line in _adoption_lines(adoptions, "every setting stayed as it was on every replay").split("\n"):
-        out("  " + line)
-    out(f"  final settings: {_show(tuner.settings())}\n  seconds taken: {seconds}")
+    out(f"  seconds taken: {seconds}\n")
     return {"farm": name, "started": started, "final": tuner.settings(), "adoptions": adoptions,
-            "seconds": seconds}
+            "rejected": rejected, "verdict": verdict_line, "never_seen": unseen, "seconds": seconds}
 
 
 def run_farms(out=print) -> list[dict]:

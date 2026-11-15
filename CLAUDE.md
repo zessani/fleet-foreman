@@ -213,12 +213,28 @@ with one clear job each. They need no model. The two AI agents are
 through `AiCrew`. When the model is off, unreachable or wrong, every decision is rule-based.
 
 **Planner self-tune** (`foreman/selftune.py`, no model). When a live day ends, Foreman replays
-the days it has already run (the latest 12) with a few idle weights around the current one
-(for 0.7: 0.5, 0.6, 0.85, 1.0), using the sweep code. It adopts a candidate only if it finishes
-at least as many jobs on time, wastes no more minutes, is clearly better on one of the two, and
-breaks no rule. It never adopts on fewer than 5 past days. Every run is logged in
-`runs/selftune/selftune.jsonl` and the latest sentence is on the decisions panel. Trial weights
-are seen only by the self-tune's own thread, so a live plan never uses one.
+the days it has already run (the latest 12) with a few nearby values of one setting at a time
+(the idle weight and two stability costs; for an idle weight of 0.7: 0.5, 0.6, 0.85, 1.0), using
+the sweep code. Held-out check: the past days are split by position, and every third day (the
+3rd, 6th, 9th) is held out, so 6 days give 4 to tune on and 2 held out. The candidates are scored,
+and the best one picked, on the tuning days only, by this rule: at least as many jobs on time,
+no more wasted minutes, clearly better on one of the two (wasted at least 1% lower), no rule
+violation. That single winner is then scored once on the held-out days against the current
+settings and adopted only if it also wins there by the same rule, so a tie on the held-out days
+adopts nothing. No other candidate is ever scored on the held-out days. It never adopts on fewer
+than 6 past days (3 or more to tune on, 2 or more held out). Every run is logged in
+`runs/selftune/selftune.jsonl` with the scores on both sets of days (`tuning` and `held_out`),
+and the latest sentence is on the decisions panel. Trial values are seen only by the
+self-tune's own thread, so a live plan never uses one.
+**Measured** (`python -m foreman.selftune farms`: 9 days per farm, one quiet day and eight
+breakdown days, tuning after each day, then the final settings against the defaults on 4 more
+breakdown days that were never in the history). On random farm 101 the idle weight 0.7 to 1 was
+adopted after day 6: wasted minutes fell 14% on the 4 tuning days (1,341 to 1,154) and 34% on
+the 2 held-out days (530 to 352), jobs on time unchanged. On the 4 never-seen days the final
+settings finished 28 jobs on time like the defaults and wasted 851 minutes against 1,229, so
+the gain held. Large farm, random 102 and random 103 adopted nothing: no setting beat the
+defaults even on the tuning days, and the final settings equal the defaults there. Earlier
+figures (18%) were measured on the days the tune had used; they should not be quoted.
 
 **AI Safety agent memory.** Each warning or hold it raises is saved with what Foreman did and,
 at the end of the day, what happened after (jobs on time, rule violations, whether the job or
