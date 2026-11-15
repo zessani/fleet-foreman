@@ -83,7 +83,7 @@ def concern(action="warn", job=None, caution=None, text="check this"):
 def test_recovery_good_answer():
     call = ai_recovery.diagnose(FakeClient(good(GOOD_RECOVERY)), recovery_case())
     assert call.status == "done"
-    assert call.answer == GOOD_RECOVERY
+    assert call.answer == {**GOOD_RECOVERY, "out_for_day": False}  # left out means a plain estimate
     assert call.agent == "AI Recovery agent"
     assert call.input == "Rusty: hydraulic hose burst"
     assert call.ms == 12.3

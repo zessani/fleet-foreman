@@ -58,6 +58,10 @@ def trial_stability(strict: float, light: float):
 CHAIN_COST = 300.0
 # Waiting for a tractor that is expected back must beat moving its work by this much.
 WAIT_MARGIN = 10.0
+# A job is held for a returning tractor only if, in the waiting schedule, it and every
+# job that depends on it still finish at least this many minutes before their deadline.
+# An estimate is a guess: waiting must leave room for the tractor to be late.
+HOLD_DEADLINE_MARGIN_MIN = 30.0
 
 Score = Callable[[Order], "float | None"]
 
@@ -313,9 +317,12 @@ def plan_with_return(farm: Farm, road_map: RoadMap, world: WorldState, previous:
 
     Two plans are made by the normal planner and compared by its normal cost:
     move the work to the other tractors now, or count the returning tractors in
-    from the time they are expected back. If waiting is cheaper, the work that
-    falls to a returning tractor is held for it (it gets no jobs until it is
-    actually back), and so is any job that depends on held work.
+    from the time they are expected back. A job that falls to a returning
+    tractor is held for it (it gets no jobs until it is actually back) only if
+    waiting is cheaper by more than WAIT_MARGIN, and the job and every job that
+    depends on it still finish HOLD_DEADLINE_MARGIN_MIN before their deadlines
+    in the waiting schedule. A job that fails the second test is moved now. Any
+    job that depends on held work waits too.
 
     had lists the jobs each returning tractor was doing before it broke, so the
     "wait" plan starts from giving it its own work back.
@@ -342,10 +349,23 @@ def plan_with_return(farm: Farm, road_map: RoadMap, world: WorldState, previous:
     if move_cost is None or not uses_returning or wait.cost + WAIT_MARGIN >= move_cost:
         return move
 
-    held = dict(wait.held)
+    for_return: dict[str, str] = {}  # job -> the returning tractor it is held for
+    move_now: list[str] = []         # jobs that would leave too little room before a deadline
     for tractor_id in returning:
         for stop in wait.routes.get(tractor_id, []):
-            held[stop.job] = waiting_reason(tractor_id)
+            if _waiting_keeps_deadlines(farm, wait, stop.job):
+                for_return[stop.job] = tractor_id
+            else:
+                move_now.append(stop.job)
+    if not for_return:
+        return move
+    if move_now:
+        return _plan_around_holds(farm, road_map, world, move, wait, for_return,
+                                  waiting_reason, options)
+
+    held = dict(wait.held)
+    for job_id, tractor_id in for_return.items():
+        held[job_id] = waiting_reason(tractor_id)
     order = {tractor_id: [stop.job for stop in route if stop.job not in held]
              for tractor_id, route in wait.routes.items() if tractor_id not in returning}
     # A job cannot run before the job it depends on, so it waits too.
@@ -364,6 +384,38 @@ def plan_with_return(farm: Farm, road_map: RoadMap, world: WorldState, previous:
         return move
     return Plan(created_at=world.now, routes=schedule.routes, held=held, cost=wait.cost,
                 ms=move.ms + wait.ms, resilience=wait.resilience)
+
+
+def _waiting_keeps_deadlines(farm: Farm, wait: Plan, job_id: str) -> bool:
+    """True when, in the waiting schedule, this job and every job that depends on it
+    (down the whole chain) finish at least HOLD_DEADLINE_MARGIN_MIN before their deadline.
+    A dependent that the waiting plan does not schedule is held for its own reason
+    and does not count."""
+    finish = {stop.job: stop.finish for stop in wait.stops()}
+    chain, index = [job_id], 0
+    while index < len(chain):
+        chain.extend(other.id for other in farm.jobs.values()
+                     if other.after == chain[index] and other.id not in chain)
+        index += 1
+    return all(farm.jobs[job].deadline - finish[job] >= HOLD_DEADLINE_MARGIN_MIN
+               for job in chain if job in finish)
+
+
+def _plan_around_holds(farm: Farm, road_map: RoadMap, world: WorldState, move: Plan, wait: Plan,
+                       for_return: dict[str, str], waiting_reason: Callable[[str], str],
+                       options: dict) -> Plan:
+    """Some of a returning tractor's work is held for it and the rest is moved now.
+
+    The normal planner places everything that is not held on the tractors in
+    service, starting from the "move" plan, so the jobs that are moved now stay
+    where that plan put them. Jobs that depend on held work are held by the
+    planner itself ("must follow ..., which is held").
+    """
+    hold = dict(options.get("hold") or {})
+    hold.update({job_id: waiting_reason(tractor_id) for job_id, tractor_id in for_return.items()})
+    mixed = plan(farm, road_map, world, move, **{**options, "hold": hold})
+    return Plan(created_at=world.now, routes=mixed.routes, held=mixed.held, cost=mixed.cost,
+                ms=move.ms + wait.ms + mixed.ms, resilience=mixed.resilience)
 
 
 def _own_work_back(move: Plan, returning: dict[str, float], had: dict[str, list[str]]):
