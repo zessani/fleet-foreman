@@ -810,7 +810,7 @@
     if (tractor.status === "waiting" && job) return `Waiting at ${where}`;
     if (tractor.status === "servicing") return "Changing implement or refuelling";
     if (tractor.status === "broken") return "Stopped. Foreman has moved its work";
-    return "Nothing to do right now";
+    return state.now > 0 ? "Nothing to do right now" : "Ready at the yard";
   }
 
   function renderTractors(foreman) {
