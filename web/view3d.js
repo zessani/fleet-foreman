@@ -22,8 +22,9 @@ import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer
 const POLL_MS = 500;
 const U = 100;                 // scene units per km (1 unit = 10 m)
 const M = 0.1;                 // scene units per metre
-const MAX_ICON_SCALE = 12;     // largest enlargement of a tractor, at the overview
-const ICON_DISTANCE = 22;      // camera distance per 1x of enlargement
+const MAX_ICON_SCALE = 26;     // largest enlargement of a tractor, at the overview
+const MAX_IMPLEMENT_SCALE = 9; // implements are enlarged less, so a wide boom does not cover a field
+const ICON_DISTANCE = 24;      // camera distance per 1x of enlargement
 const TRACTOR_GLB = "assets/tractor.glb";
 // Used only until the server sends farm.implements: width in metres read from the id.
 const FALLBACK_WIDTH = { spray: 18, mow: 4, till: 6, plant: 6 };
@@ -124,7 +125,12 @@ function noiseTexture(base, spots, size = 256) {
 
 function buildScenery() {
   if (richTerrain) {
-    const ok = attempt(() => { const g = richTerrain.buildGround(), m = richTerrain.buildMountains(); scene.add(g, m); return true; }, () => false);
+    const ok = attempt(() => {
+      const g = richTerrain.buildGround(), m = richTerrain.buildMountains();
+      g.traverse((o) => { if (o.isMesh && o.material.color) o.material.color.setRGB(1.5, 1.42, 1.3); });   // sunlit sand
+      scene.add(g, m);
+      return true;
+    }, () => false);
     if (ok) return;
   }
   const groundMap = noiseTexture("#c9a57a", ["#b8926a", "#d8b98e", "#a8845e", "#cfae86"]);
@@ -213,15 +219,15 @@ function buildFarm(farm) {
     const texture = new THREE.CanvasTexture(cv);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(side, side), new THREE.MeshLambertMaterial({ map: texture, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(side, side), new THREE.MeshLambertMaterial({ map: texture, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -80 }));
     mesh.rotation.x = -Math.PI / 2;
-    mesh.position.copy(P(node.x, node.y, 0.3));
+    mesh.position.copy(P(node.x, node.y, 0.02));
     mesh.receiveShadow = true;
     const flash = new THREE.Mesh(new THREE.PlaneGeometry(side * 1.06, side * 1.06),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
     flash.renderOrder = 3;
     flash.rotation.x = -Math.PI / 2;
-    flash.position.copy(P(node.x, node.y, 0.6));
+    flash.position.copy(P(node.x, node.y, 0.05));
     flash.visible = false;
     const tag = document.createElement("div");
     tag.className = "fieldtag";
@@ -287,10 +293,10 @@ function ribbon(points, width, y) {
 function buildRoads(farm, width) {
   for (const mesh of roadMeshes) { world.remove(mesh); mesh.geometry.dispose(); }
   roadMeshes = [];
-  const material = new THREE.MeshLambertMaterial({ color: 0xe6d0aa, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  const material = new THREE.MeshLambertMaterial({ color: 0xe6d0aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -40 });
   for (const [a, b] of farm.roads || []) {
     if (!nodes[a] || !nodes[b]) continue;
-    const mesh = new THREE.Mesh(ribbon([nodePos(a), nodePos(b)], width, 0.15), material);
+    const mesh = new THREE.Mesh(ribbon([nodePos(a), nodePos(b)], width, 0.01), material);
     mesh.receiveShadow = true;
     world.add(mesh);
     roadMeshes.push(mesh);
@@ -435,8 +441,8 @@ function buildYard(farm) {
   const g = new THREE.Group();
   if (!depot) return g;
   g.position.copy(P(depot.x, depot.y));
-  const pad = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: 0xb3a48c, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12 }));
-  pad.rotation.x = -Math.PI / 2; pad.position.y = 0.35; pad.receiveShadow = true;
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: 0xb3a48c, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -120 }));
+  pad.rotation.x = -Math.PI / 2; pad.position.y = 0.015; pad.receiveShadow = true;
   g.add(pad);
 
   const m = new THREE.Group();       // yard furniture, modelled in metres
@@ -578,7 +584,8 @@ function makeTractor(t) {
   // A ring on the ground in the tractor's colour, and a red one when it is broken.
   view.ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.4, 40),
     new THREE.MeshBasicMaterial({ color: view.color, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide }));
-  view.ring.rotation.x = -Math.PI / 2; view.ring.position.y = 0.6; view.ring.material.depthTest = false; view.ring.renderOrder = 3;
+  view.ring.rotation.x = -Math.PI / 2; view.ring.position.y = 0.05;
+  Object.assign(view.ring.material, { polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -200 });
   inner.add(view.ring);
   view.warn = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 3),
     new THREE.MeshBasicMaterial({ color: 0xef3b30 }));
@@ -595,7 +602,7 @@ function makeTractor(t) {
   tag.className = "tag";
   view.tag = tag;
   const label = new CSS2DObject(tag);
-  label.position.set(0, 5.4, 0);
+  label.position.set(0, 4.6, 0);
   inner.add(label);
 
   // Dust (tilling) and mist (spraying): a few soft puffs recycled behind the implement.
@@ -716,9 +723,9 @@ function rebuildRoutes(state, animate) {
     let pts = [];
     for (const row of mine) { const seg = toPoints(row.path); pts = pts.concat(pts.length ? seg.slice(1) : seg); }
     if (pts.length < 2) continue;
-    const geo = ribbon(pts, lineWidth, 0.9);
+    const geo = ribbon(pts, lineWidth, 0.03);
     const total = geo.index.count;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: t.color, transparent: true, opacity: 0.92, depthWrite: false, depthTest: false }));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: t.color, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -160 }));
     mesh.renderOrder = 2;
     if (animate) geo.setDrawRange(0, 0);
     routeLayer.add(mesh);
@@ -762,7 +769,7 @@ function follow(id) {
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0);
   if (dir.lengthSq() < 1e-6) dir.set(0.4, 0, 1);
   dir.normalize();
-  const position = view.pos.clone().addScaledVector(dir, 9).add(new THREE.Vector3(0, 5.5, 0));
+  const position = view.pos.clone().addScaledVector(dir, 5.2).add(new THREE.Vector3(0, 2.6, 0));
   flyTo(position, view.pos.clone().add(new THREE.Vector3(0, 0.25, 0)), 1.4);
   setButtons();
 }
@@ -927,6 +934,7 @@ function updateTractors(dt, iconScale, time) {
     const rolled = before.distanceTo(view.pos) / M / iconScale;      // metres, as the drawn tractor sees them
     for (const w of view.wheels || []) w.rotation.z -= rolled / (w.name.startsWith("wheelR") ? 0.95 : 0.6);
     view.inner.scale.setScalar(M * iconScale);
+    if (view.implement) view.implement.scale.setScalar(Math.min(iconScale, MAX_IMPLEMENT_SCALE) / iconScale);
     view.ring.visible = iconScale > 2.5;
 
     const broken = t.status === "broken";
@@ -1038,10 +1046,11 @@ function updateCard() {
 
 const timer = new THREE.Clock();
 function frame() {
-  const dt = Math.min(timer.getDelta(), 0.1), time = timer.elapsedTime;
+  const elapsed = timer.getDelta(), dt = Math.min(elapsed, 0.1), time = timer.elapsedTime;
 
   if (fly) {
-    fly.t = Math.min(1, fly.t + dt / fly.seconds);
+    // Real elapsed time, so a camera move still finishes if the tab was in the background.
+    fly.t = Math.min(1, fly.t + Math.min(elapsed, 3) / fly.seconds);
     const k = fly.t * fly.t * (3 - 2 * fly.t);
     if (followId && tractors[followId] && tractors[followId].pos) {    // the target keeps moving
       const delta = tmp.copy(tractors[followId].pos).setY(0.25).sub(fly.toT);
@@ -1051,7 +1060,7 @@ function frame() {
     controls.target.lerpVectors(fly.fromT, fly.toT, k);
     if (fly.t >= 1) fly = null;
   } else if (followId && tractors[followId] && tractors[followId].pos) {
-    const delta = tmp.copy(tractors[followId].pos).setY(0.25).sub(controls.target).multiplyScalar(ease(dt, 6));
+    const delta = tmp.copy(tractors[followId].pos).setY(0.25).sub(controls.target).multiplyScalar(ease(Math.min(elapsed, 3), 6));
     controls.target.add(delta);
     camera.position.add(delta);
   }
@@ -1062,10 +1071,10 @@ function frame() {
   if (Math.abs(camera.near - near) > near * 0.2) { camera.near = near; camera.updateProjectionMatrix(); }
   const iconScale = clamp(distance / ICON_DISTANCE, 1, MAX_ICON_SCALE);
   // Roads and route lines are widened with distance so they stay visible from the overview.
-  const wanted = clamp(distance * 0.0042, 0.8, 4);
+  const wanted = clamp(distance * 0.0042, 0.06, 4);
   if (state && (lineWidth === 0 || Math.abs(wanted - lineWidth) / lineWidth > 0.18)) {
     lineWidth = wanted;
-    buildRoads(state.farm, Math.max(0.8, wanted * 1.9));
+    buildRoads(state.farm, Math.max(0.6, wanted * 1.9));   // a 6 m dirt road at true size
     updateRoutes(state);
   }
   for (const barrier of barrierGroup.children) barrier.scale.setScalar(clamp(distance / 260, 0.25, 3));
@@ -1083,8 +1092,8 @@ function frame() {
   updateRouteAnimation(dt);
   updateCard();
   $("scale-note").textContent = iconScale < 1.05
-    ? "Tractors and implements at true size. Fields and passes are always true size."
-    : `Tractors and implements drawn at ${iconScale.toFixed(1)}× so they can be seen. Fields and passes are true size.`;
+    ? "Everything is at true size."
+    : `Tractors drawn at ${iconScale.toFixed(0)}× and implements at ${Math.min(iconScale, MAX_IMPLEMENT_SCALE).toFixed(0)}× so they can be seen. Fields and passes are true size. Follow a tractor for true size.`;
 
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
