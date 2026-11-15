@@ -49,11 +49,11 @@
     ".np-cell { font-size: clamp(22px, 3.6vw, 44px); font-weight: 700; padding: 6px 12px;",
     "  text-align: right; border-radius: 6px; font-variant-numeric: tabular-nums;",
     "  display: flex; align-items: center; justify-content: flex-end; }",
-    ".np-win { background: #223d2c; color: #7fd99a; box-shadow: inset 0 0 0 1px #67c58755; }",
+    ".np-win { background: #26332c; color: #f2f7f3; box-shadow: inset 0 0 0 1px #dfe7e288; }",
     ".np-gain { font-size: clamp(16px, 2.4vw, 30px); font-weight: 700; padding: 6px 12px;",
     "  text-align: right; display: flex; align-items: center; justify-content: flex-end;",
     "  font-variant-numeric: tabular-nums; color: #9fb0a5; }",
-    ".np-gain.np-good { color: #67c587; }",
+    ".np-gain.np-good { color: #f2f7f3; }",
     ".np-gain.np-bad { color: #ef6d68; }",
     ".np-status { font-size: 13px; color: #9fb0a5; margin-top: 10px; min-height: 1em; }",
     ".np-status.np-error { color: #ef6d68; font-weight: 700; }"
