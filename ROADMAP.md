@@ -52,10 +52,10 @@ Goal: a tractor breaks, the plan fixes itself, one tractor moves in AgOpenGPS.
 Done when: we can break any tractor and the plan repairs with no human.
 
 ### Zayyan
-- [ ] Breakdown recovery, no lost or repeated work
-- [ ] Safety check before every plan is sent
-- [ ] Five named agents with a log
-- [ ] Plain explanation of each plan change
+- [x] Breakdown recovery, no lost or repeated work
+- [x] Safety check before every plan is sent
+- [x] Five named agents with a log
+- [x] Plain explanation of each plan change
 
 ### Ahmed
 - [ ] AgOpenGPS link driving one tractor

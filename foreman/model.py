@@ -10,6 +10,9 @@ SWAP_MIN = 25.0        # implement swap at the yard
 REFUEL_MIN = 10.0      # refuel at the yard
 FUEL_RESERVE = 0.10    # never plan a tractor below this share of its tank
 REFUEL_BELOW = 0.60    # a tractor passing the yard below this share refuels
+# Real field speeds differ from the catalog, and a slower job burns more fuel.
+# Plans budget this much extra work fuel so a slow field cannot eat the reserve.
+FUEL_MARGIN = 1.3
 DEFAULT_PRIORITY = 3
 
 
@@ -106,7 +109,7 @@ def farm_from_dict(raw: dict) -> Farm:
     }
     horizon = float(raw.get("horizon_min", 660))
     jobs = {
-        j["id"]: _job_from_dict(j, order, nodes, horizon)
+        j["id"]: job_from_dict(j, order, nodes, horizon)
         for order, j in enumerate(raw.get("jobs", []))
     }
     return Farm(
@@ -124,7 +127,7 @@ def farm_from_dict(raw: dict) -> Farm:
     )
 
 
-def _job_from_dict(j: dict, order: int, nodes: dict[str, Node], horizon: float) -> Job:
+def job_from_dict(j: dict, order: int, nodes: dict[str, Node], horizon: float) -> Job:
     return Job(
         id=j["id"],
         type=j["type"],
@@ -155,6 +158,17 @@ def pick_implement(farm: Farm, tractor: Tractor, job_type: str) -> Implement | N
         return None
     # Ties broken by id so the choice never depends on list order.
     return max(usable, key=lambda implement: (implement.ha_per_hour, implement.id))
+
+
+def why_not(farm: Farm, tractor: Tractor, job_type: str) -> str:
+    """Why this tractor cannot do this type of job, in plain words. "" if it can."""
+    owned = [farm.implements[i] for i in tractor.implements if farm.implements[i].type == job_type]
+    if not owned:
+        return f"has no {job_type} implement"
+    if all(implement.min_hp > tractor.hp for implement in owned):
+        need = min(implement.min_hp for implement in owned)
+        return f"has {tractor.hp:.0f} hp and its {job_type} implement needs {need:.0f}"
+    return ""
 
 
 def work_minutes(implement: Implement, hectares: float, factor: float = 1.0) -> float:

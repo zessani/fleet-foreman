@@ -15,7 +15,7 @@ import math
 from dataclasses import dataclass
 from typing import Callable
 
-from foreman.model import (FUEL_RESERVE, REFUEL_BELOW, REFUEL_MIN, SWAP_MIN, Farm,
+from foreman.model import (FUEL_MARGIN, FUEL_RESERVE, REFUEL_BELOW, REFUEL_MIN, SWAP_MIN, Farm,
                            pick_implement, work_minutes)
 from foreman.nav import RoadMap
 from foreman.state import Stop, WorldState
@@ -220,7 +220,8 @@ class Evaluator:
         field = self.farm.jobs[job_id].field
         depot, km = self.depot, self._km
         reserve = FUEL_RESERVE * tractor.fuel_capacity
-        work_burn = work * tractor.burn_work
+        # Budgeted, not expected: the margin covers a field that runs slower than the catalog.
+        work_burn = work * tractor.burn_work * FUEL_MARGIN
         # A tractor must end the job with enough fuel to drive back to the yard
         # and still be above the reserve, or it would be stranded in the field.
         home_burn = km[(field, depot)] * tractor.burn_km

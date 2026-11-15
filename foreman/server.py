@@ -19,14 +19,14 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from foreman.engine import SCENARIO_DIR, Engine
+from foreman.engine import EVENT_LOG_PATH, SCENARIO_DIR, Engine
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 HOST = "127.0.0.1"
 PORT = 8000
 TICK_SECONDS = 0.1
 
-engine = Engine()
+engine = Engine(log_path=EVENT_LOG_PATH)
 
 
 def _clock_loop(stop: threading.Event) -> None:
@@ -88,8 +88,8 @@ def post_scenario(body: dict[str, Any]) -> dict:
 
 @app.post("/api/event")
 def post_event(body: dict[str, Any]) -> dict:
-    """Stub until Phase 2: {type: breakdown|repair|block_road|open_road|set_priority|add_job}."""
-    return {"ok": True, "received": body, "applied": False}
+    """An event for both worlds, now. Payloads are in CLAUDE.md section 8c."""
+    return engine.event(body)
 
 
 # Mounted last so the /api routes above win over the static files.

@@ -1,30 +1,24 @@
-"""Runs the Foreman world and the baseline world on one clock.
+"""The live engine behind the server: one Day on a real-time clock.
 
-Both worlds get the same farm, the same clock, and the same events, so the
-comparison between them is fair. The engine also builds the dashboard state
-of CLAUDE.md section 8c.
+It owns the start, pause, reset, and speed controls, builds the dashboard
+state of CLAUDE.md section 8c, and produces the baseline comparison report.
 """
 
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
-from typing import Callable
 
-from foreman.baseline import plan_baseline
-from foreman.model import Farm, clock, load_farm
-from foreman.nav import RoadMap
-from foreman.planner import plan
-from foreman.sim import Simulation
-from foreman.state import Plan, Stop
+from foreman.day import Day
+from foreman.model import clock
 
-SCENARIO_DIR = Path(__file__).resolve().parent.parent / "scenarios"
+ROOT = Path(__file__).resolve().parent.parent
+SCENARIO_DIR = ROOT / "scenarios"
+EVENT_LOG_PATH = ROOT / "runs" / "event_log.jsonl"
 SPEEDS = (1, 4, 16, 60)  # simulated minutes per real second
 DEFAULT_SPEED = 16
-TRACTOR_COLORS = ("#E8A33D", "#4C9BE8", "#5DBB63", "#C76BD6", "#E86A5C", "#49C5B6")
 LOG_LINES_IN_STATE = 200
-
-Planner = Callable[..., Plan]
 
 
 def default_scenario() -> Path:
@@ -33,110 +27,27 @@ def default_scenario() -> Path:
     return sample if sample.exists() else SCENARIO_DIR / "example_farm.json"
 
 
-class Run:
-    """One world: a simulation, the dispatcher planning for it, and its current plan."""
-
-    def __init__(self, farm: Farm, road_map: RoadMap, planner: Planner,
-                 use_truth: bool = True) -> None:
-        self.farm = farm
-        self.road_map = road_map
-        self.planner = planner
-        self.sim = Simulation(farm, road_map, use_truth)
-        self.plan: Plan | None = None
-        self.plan_no = 0  # counts up with every dispatched plan
-        self.rows: dict[str, dict] = {}  # job id -> its latest plan row, kept after it is done
-
-    def replan(self) -> Plan:
-        """Plan from the current state and send each tractor its new to-do list."""
-        self.plan = self.planner(self.farm, self.road_map, self.sim.world_state(), self.plan)
-        self.plan_no += 1
-        for tractor_id, stops in self.plan.routes.items():
-            self.sim.tractors[tractor_id].dispatch([stop.to_dispatch() for stop in stops],
-                                                   self.plan_no)
-            for stop in stops:
-                self.rows[stop.job] = _plan_row(stop)
-        return self.plan
-
-    def block(self) -> dict:
-        """The tractors, jobs, plan, and totals of section 8c for this world."""
-        return {
-            "tractors": [self._tractor_row(i, t) for i, t in enumerate(sorted(self.sim.tractors))],
-            "jobs": [self._job_row(job_id) for job_id in self.farm.jobs],
-            "plan": sorted(self.rows.values(), key=lambda row: (row["start"], row["tractor"])),
-            "plan_no": self.plan_no,
-            "totals": self.sim.totals(),
-        }
-
-    def _tractor_row(self, index: int, tractor_id: str) -> dict:
-        tractor = self.farm.tractors[tractor_id]
-        status = self.sim.tractors[tractor_id].status()
-        return {
-            "id": tractor_id, "name": tractor.name,
-            "x": round(status["x"], 4), "y": round(status["y"], 4),
-            "status": status["state"], "job": status["job"],
-            "fuel_pct": round(100.0 * status["fuel"] / tractor.fuel_capacity),
-            "mounted": status["mounted"],
-            "color": TRACTOR_COLORS[index % len(TRACTOR_COLORS)],
-            "heading": round(status["heading"], 1), "node": status["node"],
-        }
-
-    def _job_row(self, job_id: str) -> dict:
-        job, state = self.farm.jobs[job_id], self.sim.jobs[job_id]
-        held_reason = self.plan.held.get(job_id) if self.plan else None
-        planned = self.rows.get(job_id)
-        row = {
-            "id": job_id, "type": job.type, "field": job.field, "priority": job.priority,
-            "deadline": job.deadline,
-            "pct": round(100.0 * (1.0 - state.remaining_ha / job.area_ha)) if job.area_ha else 100,
-            "status": "held" if held_reason and state.status != "done" else state.status,
-            "tractor": state.tractor or (planned["tractor"] if planned else None),
-        }
-        if row["status"] == "held":
-            row["reason"] = held_reason
-        return row
-
-
-def _plan_row(stop: Stop) -> dict:
-    return {
-        "job": stop.job, "tractor": stop.tractor, "implement": stop.implement,
-        "start": round(stop.start, 1), "finish": round(stop.finish, 1),
-        "late_min": round(stop.late_min, 1), "path": stop.path,
-    }
-
-
-def _compare(foreman: dict, baseline: dict) -> dict:
-    return {
-        "foreman": foreman,
-        "baseline": baseline,
-        "difference": {key: round(foreman[key] - baseline[key], 1) for key in foreman},
-    }
-
-
 class Engine:
-    def __init__(self, scenario: Path | None = None) -> None:
+    def __init__(self, scenario: Path | None = None, log_path: Path | None = None) -> None:
         # The clock thread and the request handlers both touch the engine.
         self._lock = threading.RLock()
+        self._log_path = log_path
         self.running = False
         self.speed = DEFAULT_SPEED
         self.load(scenario or default_scenario())
 
     def load(self, scenario: Path) -> None:
         with self._lock:
-            self.farm = load_farm(scenario)
+            with open(scenario, encoding="utf-8") as farm_file:
+                self.raw = json.load(farm_file)
             self.scenario = scenario.stem
             self.reset()
 
     def reset(self) -> None:
         with self._lock:
             self.running = False
-            self.finished = False
-            self.road_map = RoadMap(self.farm.raw)
-            self.foreman = Run(self.farm, self.road_map, plan)
-            self.baseline = Run(self.farm, self.road_map, plan_baseline)
-            self.log: list[dict] = []
-            self.explanation: dict = {}
-            self._full_days: dict[bool, dict] = {}  # report cache, cleared on reset
-            self._submit_jobs()
+            self.day = Day(self.raw, log_path=self._log_path)
+            self._full_days: dict[tuple[bool, int], dict] = {}  # report cache
 
     def control(self, action: str | None, speed: float | None = None) -> dict:
         with self._lock:
@@ -145,7 +56,7 @@ class Engine:
                     return {"ok": False, "error": f"speed must be one of {list(SPEEDS)}"}
                 self.speed = int(speed)
             if action == "start":
-                self.running = not self.finished
+                self.running = not self.day.finished
             elif action == "pause":
                 self.running = False
             elif action == "reset":
@@ -154,154 +65,99 @@ class Engine:
                 return {"ok": False, "error": "action must be start, pause, or reset"}
             return {"ok": True, "running": self.running, "speed": self.speed}
 
+    def event(self, event: dict) -> dict:
+        """Apply an event to both worlds at the current simulated minute."""
+        with self._lock:
+            return self.day.apply(event)
+
     def tick(self, real_seconds: float) -> None:
-        """Called by the server clock. Moves both worlds forward if running."""
+        """Called by the server clock. Moves the day forward if running."""
         with self._lock:
             if self.running:
                 self.advance(real_seconds * self.speed)
 
     def advance(self, minutes: float) -> None:
         with self._lock:
-            if self.finished:
-                return
-            minutes = min(minutes, self.farm.horizon_min - self.now)
-            self.foreman.sim.advance(minutes)
-            self.baseline.sim.advance(minutes)
-            self.baseline.sim.events.clear()  # only the Foreman world is logged
-            self._log_sim_events()
-            all_done = self.foreman.sim.all_done() and self.baseline.sim.all_done()
-            if all_done or self.now >= self.farm.horizon_min - 1e-6:
-                self.finished = True
+            self.day.advance(minutes)
+            if self.day.finished:
                 self.running = False
-                done = self.foreman.sim.totals()["jobs_done"]
-                self._log("Orchestrator", "day_complete",
-                          f"Day complete: {done} of {len(self.farm.jobs)} jobs finished.")
 
     @property
     def now(self) -> float:
-        return self.foreman.sim.now
+        return self.day.now
+
+    @property
+    def finished(self) -> bool:
+        return self.day.finished
 
     def state(self) -> dict:
         with self._lock:
-            farm = self.farm
+            day, farm = self.day, self.day.farm
             return {
-                "now": round(self.now, 2),
-                "clock": clock(farm.day_start_min, self.now),
+                "now": round(day.now, 2),
+                "clock": clock(farm.day_start_min, day.now),
                 "running": self.running,
                 "speed": self.speed,
-                "finished": self.finished,
+                "finished": day.finished,
                 "scenario": self.scenario,
                 "farm": {
                     "name": farm.name,
                     "nodes": farm.raw["nodes"],
                     "roads": farm.raw.get("roads", []),
-                    "blocked": [],
+                    "blocked": sorted(sorted(road) for road in day.blocked),
                 },
                 "foreman": {
-                    **self.foreman.block(),
-                    "explanation": self.explanation,
-                    # The Safety gate is Phase 2. Until then nothing is claimed.
-                    "safety": {"passed": None, "checks": []},
-                    "log": self.log[-LOG_LINES_IN_STATE:],
+                    **day.foreman.block(),
+                    "explanation": day.foreman.explanation,
+                    "safety": day.foreman.safety,
+                    "log": day.memory.log.lines(LOG_LINES_IN_STATE),
                 },
-                "baseline": self.baseline.block(),
+                "baseline": day.baseline.block(),
             }
 
     def report(self) -> dict:
         """Foreman against the baseline: same farm, same clock, same events."""
         with self._lock:
-            for use_truth in (False, True):
-                if use_truth not in self._full_days:
-                    self._full_days[use_truth] = self._full_day(use_truth)
+            day = self.day
+            replans = day.foreman.replans
             return {
                 "scenario": self.scenario,
-                "farm": self.farm.name,
-                "jobs": len(self.farm.jobs),
+                "farm": day.farm.name,
+                "jobs": len(day.farm.jobs),
                 # The main result: a full day with hidden speed factors off, so the
                 # comparison does not depend on which tractor the factors happen to hit.
-                "main": self._full_days[False],
-                "with_hidden_factors": self._full_days[True],
+                "main": self._full_day(False),
+                "with_hidden_factors": self._full_day(True),
                 # The run on screen right now, which may still be in progress.
                 "live": {
-                    "clock": clock(self.farm.day_start_min, self.now),
-                    "finished": self.finished,
-                    **_compare(self.foreman.sim.totals(), self.baseline.sim.totals()),
+                    "clock": clock(day.farm.day_start_min, day.now),
+                    "finished": day.finished,
+                    **_compare(day.foreman.sim.totals(), day.baseline.sim.totals()),
                 },
-                "plan_ms": round(self.foreman.plan.ms, 1) if self.foreman.plan else None,
+                "plan_ms": replans[-1]["ms"] if replans else None,
+                "replans": replans,
             }
-
-    def _full_day(self, use_truth: bool) -> dict:
-        """Run a whole day for both dispatchers off screen and compare the totals."""
-        road_map = RoadMap(self.farm.raw)
-        totals = []
-        for planner in (plan, plan_baseline):
-            run = Run(self.farm, road_map, planner, use_truth)
-            run.replan()
-            run.sim.advance(self.farm.horizon_min)
-            totals.append(run.sim.totals())
-        return {"hidden_factors": use_truth, **_compare(totals[0], totals[1])}
 
     def log_lines(self) -> list[dict]:
         with self._lock:
-            return list(self.log)
+            return self.day.memory.log.lines()
 
-    def _submit_jobs(self) -> None:
-        """The jobs_submitted event: plan both worlds from the start of the day."""
-        new_plan = self.foreman.replan()
-        self.baseline.replan()
-        planned = sum(len(route) for route in new_plan.routes.values())
-        self._log("Orchestrator", "jobs_submitted",
-                  f"{len(self.farm.jobs)} jobs submitted. Routing: Fleet, Navigation, "
-                  "Safety, dispatch.")
-        self._log("Fleet", "plan",
-                  f"Planned {planned} jobs across {len(new_plan.routes)} tractors in "
-                  f"{new_plan.ms:.1f} ms.")
-        for job_id, reason in new_plan.held.items():
-            self._log("Fleet", "job_held", f"{self._job_label(job_id)} is held: {reason}.")
-        self._log("Orchestrator", "dispatch", "Plan sent to the tractors.")
-        self.explanation = self._explain_first_plan(new_plan, planned)
+    def _full_day(self, use_truth: bool) -> dict:
+        """Run the whole day off screen, with the same events, and compare the totals."""
+        key = (use_truth, len(self.day.manual))
+        if key not in self._full_days:
+            day = Day(self.raw, use_truth, extra_events=self.day.manual)
+            day.advance(day.farm.horizon_min)
+            self._full_days[key] = {
+                "hidden_factors": use_truth,
+                **_compare(day.foreman.sim.totals(), day.baseline.sim.totals()),
+            }
+        return self._full_days[key]
 
-    def _explain_first_plan(self, new_plan: Plan, planned: int) -> dict:
-        late = [stop for stop in new_plan.stops() if stop.late_min > 0]
-        deadlines = ("All deadlines are met." if not late
-                     else f"{len(late)} job(s) will miss their deadline.")
-        held = f" {len(new_plan.held)} held." if new_plan.held else ""
-        return {
-            "headline": f"Day plan ready at {clock(self.farm.day_start_min, new_plan.created_at)}.",
-            "summary": f"{planned} jobs planned across {len(new_plan.routes)} tractors.{held} "
-                       f"{deadlines}",
-            "changes": [self._describe_stop(stop) for stop in new_plan.stops()],
-            "ms": round(new_plan.ms, 1),
-        }
 
-    def _describe_stop(self, stop: Stop) -> str:
-        farm = self.farm
-        at = lambda minute: clock(farm.day_start_min, minute)  # noqa: E731
-        job = farm.jobs[stop.job]
-        margin = job.deadline - stop.finish
-        timing = (f"{margin:.0f} min before its {at(job.deadline)} deadline" if margin >= 0
-                  else f"{-margin:.0f} min past its {at(job.deadline)} deadline")
-        return (f"{self._job_label(stop.job)}: {farm.tractors[stop.tractor].name} with the "
-                f"{farm.implements[stop.implement].name}, {at(stop.start)} to {at(stop.finish)}, "
-                f"{timing}.")
-
-    def _job_label(self, job_id: str) -> str:
-        job = self.farm.jobs[job_id]
-        return f"{job.type.capitalize()} {self.farm.nodes[job.field].name}"
-
-    def _log_sim_events(self) -> None:
-        for event in self.foreman.sim.events:
-            name = self.farm.tractors[event["tractor"]].name
-            label = self._job_label(event["job"])
-            if event["type"] == "job_started":
-                self._log("Recovery", "job_started", f"{name} started: {label}.", event["t"])
-            elif event["type"] == "job_done":
-                self._log("Recovery", "job_done", f"{name} finished: {label}.", event["t"])
-        self.foreman.sim.events.clear()
-
-    def _log(self, agent: str, event: str, message: str, t: float | None = None) -> None:
-        t = self.now if t is None else t
-        self.log.append({
-            "t": round(t, 2), "clock": clock(self.farm.day_start_min, t),
-            "agent": agent, "event": event, "message": message,
-        })
+def _compare(foreman: dict, baseline: dict) -> dict:
+    return {
+        "foreman": foreman,
+        "baseline": baseline,
+        "difference": {key: round(foreman[key] - baseline[key], 1) for key in foreman},
+    }

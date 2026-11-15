@@ -32,6 +32,8 @@ class SimTractor:
         self.fuel = tractor.fuel
         self.mounted = tractor.mounted
         self.broken = False
+        self.stalled = False           # silent failure: reports "working" but covers no ground
+        self.fault_at: float | None = None  # when it really failed; used to measure detection time
         self.stops: list[dict] = []
         self.cur: dict | None = None   # stop being executed
         self.phase: str | None = None  # travel | service | wait | work
@@ -91,6 +93,8 @@ class SimTractor:
         return TractorState(self.id, node, free_at, fuel, mounted, not self.broken, busy)
 
     def break_down(self) -> None:
+        if self.fault_at is None:
+            self.fault_at = self.sim.now
         if self.phase == "work":
             self._release_job()
         if self.cur is not None and self.leg_t > EPS:
@@ -101,6 +105,14 @@ class SimTractor:
 
     def repair(self) -> None:
         self.broken = False
+        self.stalled = False
+        self.fault_at = None
+
+    def stall(self) -> None:
+        """Fail silently: the status still says working, but nothing gets done."""
+        self.stalled = True
+        if self.fault_at is None:
+            self.fault_at = self.sim.now
 
     # ---- state helpers ----------------------------------------------------
 
@@ -268,8 +280,12 @@ class SimTractor:
 
     def _work(self, rem: float, t: float) -> float:
         state = self.sim.jobs[self.cur["job"]]
+        if self.stalled:
+            return rem  # time passes, the field does not get covered
         need = state.remaining_ha / self.rate if self.rate > 0 else math.inf
         used = min(rem, need)
+        covered = min(state.remaining_ha, self.rate * used)
+        self.sim.worked_ha[state.id] = self.sim.worked_ha.get(state.id, 0.0) + covered
         state.remaining_ha = max(0.0, state.remaining_ha - self.rate * used)
         self.fuel -= self.t.burn_work * used
         self.minutes["work"] += used
@@ -302,6 +318,7 @@ class Simulation:
         }
         self.violations: list[dict] = []
         self.events: list[dict] = []
+        self.worked_ha: dict[str, float] = {}  # job id -> hectares covered so far, by anyone
         for tractor_id in sorted(farm.tractors):
             self.tractors[tractor_id] = SimTractor(farm.tractors[tractor_id], self)
         # (tractor, job type) pairs where the tractor owns an implement it can pull.

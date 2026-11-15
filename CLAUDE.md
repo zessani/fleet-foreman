@@ -372,6 +372,9 @@ say so and stop. Do not edit it.
 - **Fuel to get home:** stricter than the line above. A tractor must finish
   every job with enough fuel to drive back to the yard and still be above the
   10% reserve. Otherwise it could be stranded in a field.
+- **Fuel margin:** real field speeds differ from the catalog, and a slower job
+  burns more fuel. The planner budgets 30% extra work fuel for every job, so
+  a field that runs up to 30% longer than planned cannot eat the reserve.
 - **One tank per job:** there is no refuel in the middle of a job. A job that
   no capable tractor can finish on a full tank, with the drive out and the
   drive home, is held with that reason. Split it into smaller jobs.
