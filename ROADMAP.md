@@ -85,7 +85,7 @@ Goal: the numbers and finish that make it feel like a real product.
 
 ### Vishva
 - [x] Accuracy chart
-- [ ] "Why?" panel
+- [x] "Why?" panel
 - [ ] Screenshots and numbers in the deck
 - [ ] README finished
 
