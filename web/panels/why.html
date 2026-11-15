@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foreman why</title>
+<style>
+  body { margin: 0; padding: 16px; background: #111714; }
+</style>
+</head>
+<body>
+<!--
+  Test page for the "Why?" panel.
+  http://localhost:8000/panels/why.html          opens on the active job
+  http://localhost:8000/panels/why.html?job=J5   opens on job J5
+-->
+<div id="why-panel" style="max-width: 760px"></div>
+<script src="why.js"></script>
+<script>
+  var startJob = new URLSearchParams(location.search).get("job");
+  if (startJob) setTimeout(function () { window.WhyPanel.show(startJob); }, 300);
+</script>
+</body>
+</html>
