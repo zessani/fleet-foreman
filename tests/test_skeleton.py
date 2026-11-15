@@ -22,8 +22,8 @@ def test_state_has_every_part_of_section_8c() -> None:
     assert {"name", "nodes", "roads", "blocked"} <= state["farm"].keys()
 
     run_keys = {"tractors", "jobs", "plan", "totals"}
-    totals_keys = {"jobs_done", "on_time", "travel_min", "idle_min",
-                   "working_share", "km", "violations"}
+    totals_keys = {"jobs_done", "on_time", "travel_min", "idle_min", "unassigned_min",
+                   "service_min", "working_share", "km", "violations"}
     tractor_keys = {"id", "name", "x", "y", "status", "job", "fuel_pct", "mounted", "color"}
     job_keys = {"id", "type", "field", "priority", "deadline", "pct", "status", "tractor"}
     plan_keys = {"job", "tractor", "implement", "start", "finish", "late_min", "path"}

@@ -12,7 +12,7 @@ import math
 from dataclasses import replace
 
 from foreman.model import (
-    FUEL_RESERVE, REFUEL_MIN, SWAP_MIN, Farm, Tractor, truth_factor,
+    FUEL_RESERVE, REFUEL_MIN, SWAP_MIN, Farm, Tractor, pick_implement, truth_factor,
 )
 from foreman.nav import RoadMap
 from foreman.state import JobState, TractorState, WorldState
@@ -39,8 +39,11 @@ class SimTractor:
         self.leg_t = 0.0               # minutes spent on the current leg
         self.queue: list[list] = []    # pending [kind, minutes_left] service items
         self.rate = 0.0                # work rate in ha/min for the job in progress
-        self.minutes = {"work": 0.0, "travel": 0.0, "service": 0.0, "wait": 0.0, "idle": 0.0}
+        # idle: no task while there is work it could do. unassigned: no task while any job remains.
+        self.minutes = {"work": 0.0, "travel": 0.0, "service": 0.0, "wait": 0.0, "idle": 0.0,
+                        "unassigned": 0.0}
         self.km = 0.0
+        self.plan_no = 0               # number of the newest plan this tractor accepted
 
     # ---- adapter ----------------------------------------------------------
 
@@ -52,7 +55,12 @@ class SimTractor:
             "pct": self._pct(), "fuel": self.fuel, "mounted": self.mounted,
         }
 
-    def dispatch(self, stops: list[dict]) -> None:
+    def dispatch(self, stops: list[dict], plan_no: int | None = None) -> None:
+        # A command from an older plan may arrive late. It must never undo a newer one.
+        if plan_no is not None:
+            if plan_no < self.plan_no:
+                return
+            self.plan_no = plan_no
         new = [dict(s) for s in stops]
         if self.phase == "work":
             # Keep working; never do the same job twice.
@@ -152,6 +160,8 @@ class SimTractor:
         while rem > EPS and not self.broken:
             if self.cur is None and not self._begin_next_stop():
                 if self.sim.open_jobs():
+                    self.minutes["unassigned"] += rem
+                if self.sim.has_doable_work(self, t):
                     self.minutes["idle"] += rem
                 return
             used = self._run_phase(rem, t)
@@ -294,6 +304,13 @@ class Simulation:
         self.events: list[dict] = []
         for tractor_id in sorted(farm.tractors):
             self.tractors[tractor_id] = SimTractor(farm.tractors[tractor_id], self)
+        # (tractor, job type) pairs where the tractor owns an implement it can pull.
+        self._can_do: set[tuple[str, str]] = {
+            (tractor.id, job_type)
+            for tractor in farm.tractors.values()
+            for job_type in {implement.type for implement in farm.implements.values()}
+            if pick_implement(farm, tractor, job_type) is not None
+        }
 
     def advance(self, minutes: float) -> None:
         steps, left = divmod(minutes + EPS, SUB_STEP_MIN)
@@ -319,6 +336,16 @@ class Simulation:
 
     def open_jobs(self) -> bool:
         return any(j.status != "done" for j in self.jobs.values())
+
+    def has_doable_work(self, tractor: SimTractor, t: float) -> bool:
+        """Is there a job this tractor could start now: right implement, released,
+        its predecessor done, and nobody already working it?"""
+        for job_id, state in self.jobs.items():
+            if state.status != "pending":
+                continue
+            if (tractor.id, self.farm.jobs[job_id].type) in self._can_do and self._ready(job_id, t):
+                return True
+        return False
 
     def xy(self, node: str) -> tuple[float, float]:
         n = self.farm.nodes[node]
@@ -396,6 +423,8 @@ class Simulation:
             "on_time": on_time,
             "travel_min": round(total.get("travel", 0.0), 1),
             "idle_min": round(total.get("idle", 0.0) + total.get("wait", 0.0), 1),
+            "unassigned_min": round(total.get("unassigned", 0.0), 1),
+            "service_min": round(total.get("service", 0.0), 1),
             "working_share": round(100.0 * total.get("work", 0.0) / busy, 1) if busy else 0.0,
             "km": round(sum(t.km for t in self.tractors.values()), 1),
             "violations": len(self.violations),

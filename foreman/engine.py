@@ -36,19 +36,23 @@ def default_scenario() -> Path:
 class Run:
     """One world: a simulation, the dispatcher planning for it, and its current plan."""
 
-    def __init__(self, farm: Farm, road_map: RoadMap, planner: Planner) -> None:
+    def __init__(self, farm: Farm, road_map: RoadMap, planner: Planner,
+                 use_truth: bool = True) -> None:
         self.farm = farm
         self.road_map = road_map
         self.planner = planner
-        self.sim = Simulation(farm, road_map)
+        self.sim = Simulation(farm, road_map, use_truth)
         self.plan: Plan | None = None
+        self.plan_no = 0  # counts up with every dispatched plan
         self.rows: dict[str, dict] = {}  # job id -> its latest plan row, kept after it is done
 
     def replan(self) -> Plan:
         """Plan from the current state and send each tractor its new to-do list."""
         self.plan = self.planner(self.farm, self.road_map, self.sim.world_state(), self.plan)
+        self.plan_no += 1
         for tractor_id, stops in self.plan.routes.items():
-            self.sim.tractors[tractor_id].dispatch([stop.to_dispatch() for stop in stops])
+            self.sim.tractors[tractor_id].dispatch([stop.to_dispatch() for stop in stops],
+                                                   self.plan_no)
             for stop in stops:
                 self.rows[stop.job] = _plan_row(stop)
         return self.plan
@@ -59,6 +63,7 @@ class Run:
             "tractors": [self._tractor_row(i, t) for i, t in enumerate(sorted(self.sim.tractors))],
             "jobs": [self._job_row(job_id) for job_id in self.farm.jobs],
             "plan": sorted(self.rows.values(), key=lambda row: (row["start"], row["tractor"])),
+            "plan_no": self.plan_no,
             "totals": self.sim.totals(),
         }
 
@@ -99,6 +104,14 @@ def _plan_row(stop: Stop) -> dict:
     }
 
 
+def _compare(foreman: dict, baseline: dict) -> dict:
+    return {
+        "foreman": foreman,
+        "baseline": baseline,
+        "difference": {key: round(foreman[key] - baseline[key], 1) for key in foreman},
+    }
+
+
 class Engine:
     def __init__(self, scenario: Path | None = None) -> None:
         # The clock thread and the request handlers both touch the engine.
@@ -122,6 +135,7 @@ class Engine:
             self.baseline = Run(self.farm, self.road_map, plan_baseline)
             self.log: list[dict] = []
             self.explanation: dict = {}
+            self._full_days: dict[bool, dict] = {}  # report cache, cleared on reset
             self._submit_jobs()
 
     def control(self, action: str | None, speed: float | None = None) -> dict:
@@ -196,18 +210,36 @@ class Engine:
     def report(self) -> dict:
         """Foreman against the baseline: same farm, same clock, same events."""
         with self._lock:
-            foreman, baseline = self.foreman.sim.totals(), self.baseline.sim.totals()
+            for use_truth in (False, True):
+                if use_truth not in self._full_days:
+                    self._full_days[use_truth] = self._full_day(use_truth)
             return {
                 "scenario": self.scenario,
                 "farm": self.farm.name,
-                "clock": clock(self.farm.day_start_min, self.now),
-                "finished": self.finished,
                 "jobs": len(self.farm.jobs),
-                "foreman": foreman,
-                "baseline": baseline,
-                "difference": {key: round(foreman[key] - baseline[key], 1) for key in foreman},
+                # The main result: a full day with hidden speed factors off, so the
+                # comparison does not depend on which tractor the factors happen to hit.
+                "main": self._full_days[False],
+                "with_hidden_factors": self._full_days[True],
+                # The run on screen right now, which may still be in progress.
+                "live": {
+                    "clock": clock(self.farm.day_start_min, self.now),
+                    "finished": self.finished,
+                    **_compare(self.foreman.sim.totals(), self.baseline.sim.totals()),
+                },
                 "plan_ms": round(self.foreman.plan.ms, 1) if self.foreman.plan else None,
             }
+
+    def _full_day(self, use_truth: bool) -> dict:
+        """Run a whole day for both dispatchers off screen and compare the totals."""
+        road_map = RoadMap(self.farm.raw)
+        totals = []
+        for planner in (plan, plan_baseline):
+            run = Run(self.farm, road_map, planner, use_truth)
+            run.replan()
+            run.sim.advance(self.farm.horizon_min)
+            totals.append(run.sim.totals())
+        return {"hidden_factors": use_truth, **_compare(totals[0], totals[1])}
 
     def log_lines(self) -> list[dict]:
         with self._lock:

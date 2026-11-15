@@ -15,11 +15,12 @@ class TractorAdapter(Protocol):
         """Return {id, x, y, node, heading, state, job, pct, fuel, mounted}."""
         ...
 
-    def dispatch(self, stops: list[dict]) -> None:
+    def dispatch(self, stops: list[dict], plan_no: int) -> None:
         """Replace the tractor's to-do list. Work in progress is not interrupted.
 
         Each stop is {job, field, implement, via_yard, swap, refuel, path},
-        where path is a list of node ids.
+        where path is a list of node ids. plan_no counts up with every plan;
+        a command with a number lower than one already accepted is ignored.
         """
         ...
 

@@ -109,8 +109,8 @@ def test_totals_shape_and_jobs_done():
     sim.tractors["T1"].dispatch([stop("A", "F1", ["YARD", "F1"]), stop("C", "F2", ["F1", "F2"])])
     sim.advance(100)
     totals = sim.totals()
-    assert set(totals) == {"jobs_done", "on_time", "travel_min", "idle_min",
-                           "working_share", "km", "violations"}
+    assert set(totals) == {"jobs_done", "on_time", "travel_min", "idle_min", "unassigned_min",
+                           "service_min", "working_share", "km", "violations"}
     assert totals["jobs_done"] == 2 and totals["on_time"] == 1
     assert sim.all_done() is False
     assert totals["km"] == pytest.approx(10.0, abs=0.1)

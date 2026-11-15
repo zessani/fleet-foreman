@@ -221,9 +221,11 @@ class TractorAdapter(Protocol):
     def status(self) -> dict: ...
         # {id, x, y, node, heading, state, job, pct, fuel, mounted}
         # state: idle | traveling | servicing | working | waiting | broken
-    def dispatch(self, stops: list[dict]) -> None: ...
+    def dispatch(self, stops: list[dict], plan_no: int) -> None: ...
         # Replace the tractor's to-do list. Work in progress is not interrupted.
         # stop: {job, field, implement, via_yard, swap, refuel, path: [node ids]}
+        # plan_no counts up with every dispatched plan. A command with a number
+        # lower than one the tractor already accepted is ignored.
     def stop(self) -> None: ...
 ```
 
@@ -240,7 +242,9 @@ class TractorAdapter(Protocol):
               "deadline": 240, "pct": 60, "status": "active", "tractor": "T2"}],
     "plan": [{"job": "J1", "tractor": "T2", "implement": "sprayer_18",
               "start": 30, "finish": 85, "late_min": 0, "path": ["YARD", "X1", "F1"]}],
+    "plan_no": 3,
     "totals": {"jobs_done": 4, "on_time": 4, "travel_min": 61, "idle_min": 12,
+               "unassigned_min": 40, "service_min": 25,
                "working_share": 78.5, "km": 24.1, "violations": 0},
     "explanation": {"headline": "...", "summary": "...", "changes": [], "ms": 38},
     "safety": {"passed": true, "checks": []},
@@ -261,13 +265,44 @@ Shapes inside the state
   of the day. `agent` is one of the five agent names.
 - `speed` is simulated minutes per real second: 1, 4, 16, or 60.
 - Job and implement `type` values: `spray | mow | till | plant`.
+- `totals` meanings are in section 13. `baseline` has the same `tractors`,
+  `jobs`, `plan`, `plan_no`, and `totals` as `foreman`.
+- Extra keys, safe to ignore: top level `finished` (the day is over) and
+  `scenario` (file name without `.json`); each tractor has `heading` (degrees)
+  and `node`; a `held` job has `reason`.
+- `safety.passed` is `null` until the Safety gate has checked a plan.
+
+Event payloads for `POST /api/event`
+- `{"type": "breakdown", "tractor": "T2"}`
+- `{"type": "repair", "tractor": "T2"}`
+- `{"type": "block_road", "a": "X1", "b": "F1"}`
+- `{"type": "open_road", "a": "X1", "b": "F1"}`
+- `{"type": "set_priority", "job": "J4", "priority": 5}`
+- `{"type": "add_job", "job": {...a job as in section 8a...}}`
+
+The same shapes, plus `at` in minutes, are used in a farm file's `events` list.
+The reply is `{"ok": true}` or `{"ok": false, "error": "..."}`.
+
+Report: `GET /api/report`
+```json
+{
+  "scenario": "example_farm", "farm": "...", "jobs": 5, "plan_ms": 0.5,
+  "main": {"hidden_factors": false, "foreman": {}, "baseline": {}, "difference": {}},
+  "with_hidden_factors": {"hidden_factors": true, "foreman": {}, "baseline": {}, "difference": {}},
+  "live": {"clock": "09:35", "finished": false, "foreman": {}, "baseline": {}, "difference": {}}
+}
+```
+- `foreman` and `baseline` are `totals` objects. `difference` is Foreman minus baseline.
+- `main` is a full day run off screen with hidden speed factors off. It is the
+  headline comparison. `with_hidden_factors` is the same day with them on.
+  `live` is the run on screen, which may still be in progress.
 
 Other endpoints
 - `POST /api/control` with `{action: start|pause|reset, speed}`
 - `POST /api/scenario` with `{name}` to load a farm file
 - `POST /api/event` with `{type: breakdown|repair|block_road|open_road|set_priority|add_job, ...}`
 - `GET /api/why?job=J1`
-- `GET /api/log` (JSON Lines), `GET /api/report` (baseline comparison)
+- `GET /api/log` (JSON Lines), `GET /api/report` (baseline comparison, shape above)
 
 Every event is applied to both the Foreman run and the baseline run at the
 same simulated time, so the comparison is fair.
@@ -334,6 +369,12 @@ say so and stop. Do not edit it.
   Use shortest path. A blocked road is removed from the graph.
 - **Fuel:** travel burns `burn_km` per km. Work burns `burn_work` per minute.
   Never plan a tractor below **10%** of its tank.
+- **Fuel to get home:** stricter than the line above. A tractor must finish
+  every job with enough fuel to drive back to the yard and still be above the
+  10% reserve. Otherwise it could be stranded in a field.
+- **One tank per job:** there is no refuel in the middle of a job. A job that
+  no capable tractor can finish on a full tank, with the drive out and the
+  drive home, is held with that reason. Split it into smaller jobs.
 - **Implement swap:** happens at the yard and takes **25 minutes**. A tractor
   that needs a different implement drives to the yard first.
 - **Refuel:** at the yard, **10 minutes**. If a tractor passes the yard below
@@ -368,7 +409,8 @@ and the world state. Do not trust the planner.
 
 1. Each job has exactly one tractor. No finished job is rescheduled.
 2. Right implement type, the tractor owns it, and has enough power.
-3. Fuel stays above the 10% reserve.
+3. Fuel stays above the 10% reserve, and each job ends with enough fuel to
+   drive back to the yard above the reserve (section 10).
 4. One machine per field at a time.
 5. Jobs in a field follow their order (`after`).
 6. No route uses a closed road.
@@ -389,7 +431,9 @@ Measured on the same farm with the same events, Foreman against the baseline.
 | Jobs finished on time | Work that kept its value |
 | Working share of the day | Work minutes / (work + travel + waiting + service) |
 | Travel time and distance | Driving that earned nothing |
-| Idle minutes | A working tractor with nothing to do while jobs remain, plus waiting at a field |
+| Idle minutes | A tractor with no task while there is unfinished work it could do (it has the right implement, the job is released, its predecessor is done, and nobody is already working it), plus minutes waiting at a field |
+| Unassigned minutes | A working tractor with no task while any job remains, whether or not it could do that job. Always at least the no-task part of idle |
+| Yard service minutes | Time spent on implement swaps and refuels |
 | Re-plan time | Milliseconds from event to dispatched plan |
 | Rule violations | Count from the referee. Target is zero |
 | Estimate error by day | How far predicted job times were from actual (learning loop) |
