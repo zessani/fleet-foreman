@@ -476,6 +476,16 @@ function buildFarm(farm) {
   const span = Math.max(size.x, size.z * 1.3, 200);
   overview.target.copy(centre);
   overview.position.set(centre.x + span * 0.12, span * 0.24, centre.z + span * 0.66);
+  // Pull back only as far as needed for every field and the yard to sit clear of the panels.
+  const points = farm.nodes.filter((n) => n.kind !== "junction").map((n) => P(n.x, n.y));
+  const direction = overview.position.clone().sub(centre).normalize(), probe = camera.clone();
+  for (let distance = span * 0.3; distance < span * 3; distance *= 1.05) {
+    probe.position.copy(centre).addScaledVector(direction, distance);
+    probe.lookAt(centre);
+    probe.updateMatrixWorld();
+    const inView = points.every((p) => { const q = p.clone().project(probe); return Math.abs(q.x) < 0.84 && q.y > -0.66 && q.y < 0.46; });
+    if (inView) { overview.position.copy(probe.position); break; }
+  }
   flyTo(overview.position, overview.target, 0);
 }
 
