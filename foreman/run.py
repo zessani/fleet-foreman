@@ -91,6 +91,7 @@ class Run:
             "jobs": [self._job_row(job_id) for job_id in self.farm.jobs],
             "plan": sorted(self.rows.values(), key=lambda row: (row["start"], row["tractor"])),
             "plan_no": self.plan_no,
+            "resilience": self.plan.resilience if self.plan else {},
             "totals": self.sim.totals(),
         }
 
