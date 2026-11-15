@@ -40,8 +40,8 @@ is broken, and we beat "first come, first served".
 - [ ] Farm map with tractors moving and field progress
 
 ### Vishwa
-- [ ] Sample farm file: 3 tractors, 8 fields, 10 jobs
-- [ ] Farm file checker
+- [x] Sample farm file: 3 tractors, 8 fields, 10 jobs
+- [x] Farm file checker
 - [ ] Numbers panel
 - [ ] Deck started
 
