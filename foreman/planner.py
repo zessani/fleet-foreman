@@ -12,7 +12,9 @@ re-plan is the same call with a newer state and the plan it replaces
 from __future__ import annotations
 
 import math
+import threading
 import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Callable
 
@@ -31,6 +33,26 @@ MIN_GAIN = 1e-6         # ignore "improvements" that are only rounding noise
 CHANGE_STRICT = 500.0
 # Light lets the plan rebalance when capacity comes back or new work arrives.
 CHANGE_LIGHT = 15.0
+_trial = threading.local()  # stability costs being tried by the self-tune, seen by its own thread only
+
+
+def stability_cost(strict: bool) -> float:
+    """The cost of moving a job on a re-plan for this thread: a trial value if set, else the constant."""
+    trial = getattr(_trial, "costs", None) or {}
+    key = "strict" if strict else "light"
+    return trial.get(key, CHANGE_STRICT if strict else CHANGE_LIGHT)
+
+
+@contextmanager
+def trial_stability(strict: float, light: float):
+    """Try other stability costs in this thread only, so a live plan in another thread is unaffected."""
+    _trial.costs = {"strict": strict, "light": light}
+    try:
+        yield
+    finally:
+        _trial.costs = None
+
+
 # Caution cost per job that sits on the same tractor as the job it depends on:
 # one breakdown of that tractor would then stall the whole chain.
 CHAIN_COST = 300.0

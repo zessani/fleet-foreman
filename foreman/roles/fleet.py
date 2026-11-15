@@ -9,7 +9,7 @@ from __future__ import annotations
 from foreman.roles.base import Cycle, Role
 from foreman.model import pick_implement, why_not
 from foreman.model import clock
-from foreman.planner import CHANGE_LIGHT, CHANGE_STRICT, plan_with_return
+from foreman.planner import plan_with_return, stability_cost
 
 # After these events there is new capacity or new work, so the plan may rebalance.
 REBALANCE_EVENTS = {"jobs_submitted", "repaired", "job_added", "downtime_estimate",
@@ -26,7 +26,7 @@ class FleetPlanner(Role):
     def plan(self, cycle: Cycle) -> None:
         cycle.world = self.run.world()
         rebalance = any(event["type"] in REBALANCE_EVENTS for event in cycle.events)
-        cycle.change_cost = CHANGE_LIGHT if rebalance else CHANGE_STRICT
+        cycle.change_cost = stability_cost(strict=not rebalance)
         previous = None if cycle.from_scratch else cycle.previous
         self._pick_implements(cycle)
         cycle.plan = plan_with_return(
