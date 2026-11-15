@@ -3,104 +3,579 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Foreman placeholder</title>
+<title>Foreman Command Center</title>
 <style>
+  :root {
+    color-scheme: dark;
+    --bg: #111714;
+    --panel: #19221e;
+    --panel-2: #202c26;
+    --line: #34453c;
+    --text: #edf5ef;
+    --muted: #9fb0a5;
+    --accent: #f0ae4d;
+    --good: #67c587;
+    --danger: #ef6d68;
+  }
+
+  * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 16px;
-    background: #ffffff;
-    color: #1a1a1a;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-width: 320px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     font-size: 14px;
   }
-  h1 { font-size: 20px; margin: 8px 0; }
-  h2 { font-size: 16px; margin: 20px 0 8px; }
-  .note { background: #fff4d6; border: 1px solid #e8c766; padding: 8px; border-radius: 4px; }
-  .status { color: #555; margin: 4px 0; }
-  .error { color: #b00020; font-weight: bold; }
-  table { border-collapse: collapse; width: 100%; overflow-x: auto; display: block; }
-  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; white-space: nowrap; }
-  th { background: #f2f2f2; }
-  details { margin-top: 20px; }
-  pre { background: #f7f7f7; padding: 8px; overflow: auto; font-size: 12px; }
+  button, select { font: inherit; }
+  header {
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line);
+    background: #151d19;
+  }
+  h1 { margin: 0; font-size: 20px; }
+  h2 { margin: 0 0 12px; font-size: 15px; }
+  .subhead { margin-top: 3px; color: var(--muted); font-size: 12px; }
+  .connection { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
+  .connected .dot { background: var(--good); box-shadow: 0 0 0 3px #67c58722; }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  button, select {
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid #465b50;
+    border-radius: 6px;
+    padding: 7px 12px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { color: #17120a; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .clock { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 700; }
+  .run-state { color: var(--muted); min-width: 54px; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 12px;
+    padding: 12px;
+    min-height: calc(100vh - 117px);
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .map-panel { position: relative; min-height: 520px; overflow: hidden; }
+  #farm-map { display: block; width: 100%; height: 100%; min-height: 520px; }
+  .map-label {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    padding: 6px 9px;
+    color: var(--muted);
+    background: #111714d9;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    pointer-events: none;
+  }
+  .legend {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 6px 9px;
+    color: var(--muted);
+    background: #111714e8;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    font-size: 11px;
+    pointer-events: none;
+  }
+  .key { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; background: #6f927d; }
+  .swatch.working { background: var(--good); }
+  .swatch.broken { background: var(--danger); }
+  .swatch.blocked { width: 16px; height: 3px; border-radius: 0; background: var(--danger); }
+
+  aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .side-section { padding: 14px; }
+  .tractor-list, .job-list { display: grid; gap: 8px; }
+  .tractor-card, .job-row {
+    padding: 9px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #151d19;
+  }
+  .tractor-title, .job-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tractor-name, .job-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tractor-color { width: 9px; height: 9px; display: inline-block; margin-right: 6px; border-radius: 50%; }
+  .badge {
+    padding: 2px 6px;
+    border-radius: 10px;
+    color: var(--muted);
+    background: var(--panel-2);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .badge.working { color: #a7e8bd; background: #204b31; }
+  .badge.traveling { color: #b9d9ff; background: #244466; }
+  .badge.broken { color: #ffc0bd; background: #602c2a; }
+  .meta { margin-top: 5px; color: var(--muted); font-size: 11px; }
+  .progress { height: 5px; margin-top: 8px; overflow: hidden; background: #304037; border-radius: 3px; }
+  .progress > span { display: block; height: 100%; background: var(--good); }
+  .empty { color: var(--muted); font-style: italic; }
+  .error { color: #ffc0bd; }
+  details { padding: 12px 14px; }
+  summary { cursor: pointer; color: var(--muted); }
+  pre { max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 11px; color: #c9d7ce; }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    .map-panel, #farm-map { min-height: 480px; }
+    aside { display: grid; grid-template-columns: 1fr 1fr; }
+    aside details { grid-column: 1 / -1; }
+  }
+  @media (max-width: 580px) {
+    header { align-items: flex-start; }
+    .controls { padding: 10px 12px; }
+    .clock { order: -1; width: 100%; margin: 0; }
+    main { padding: 8px; }
+    aside { display: flex; }
+  }
 </style>
 </head>
 <body>
-<div class="note">Placeholder page. Ahmed replaces this with the dashboard.</div>
+<header>
+  <div>
+    <h1 id="farm-name">Foreman</h1>
+    <div class="subhead">Fleet command center</div>
+  </div>
+  <div id="connection" class="connection">
+    <span class="dot"></span><span id="connection-text">Connecting</span>
+  </div>
+</header>
 
-<h1 id="farm">Farm: ...</h1>
-<p class="status">Clock: <span id="clock">--:--</span> | Running: <span id="running">no</span></p>
-<p id="connection" class="status"></p>
+<div class="controls">
+  <button class="primary" data-action="start">Start</button>
+  <button data-action="pause">Pause</button>
+  <button data-action="reset">Reset</button>
+  <label for="speed">Speed</label>
+  <select id="speed">
+    <option value="1">1×</option>
+    <option value="4" selected>4×</option>
+    <option value="10">10×</option>
+    <option value="30">30×</option>
+  </select>
+  <span id="control-error" class="error"></span>
+  <span class="clock" id="clock">--:--</span>
+  <span class="run-state" id="run-state">Paused</span>
+</div>
 
-<h2>Foreman tractors</h2>
-<table>
-  <thead><tr><th>Name</th><th>Status</th><th>Job</th><th>Fuel %</th><th>Mounted</th></tr></thead>
-  <tbody id="tractors"></tbody>
-</table>
+<main>
+  <section class="panel map-panel" aria-label="Farm map">
+    <canvas id="farm-map"></canvas>
+    <div class="map-label" id="map-label">Waiting for farm data</div>
+    <div class="legend">
+      <span class="key"><span class="swatch"></span>Field</span>
+      <span class="key"><span class="swatch working"></span>Active</span>
+      <span class="key"><span class="swatch broken"></span>Broken</span>
+      <span class="key"><span class="swatch blocked"></span>Blocked road</span>
+    </div>
+  </section>
 
-<h2>Foreman jobs</h2>
-<table>
-  <thead><tr><th>ID</th><th>Type</th><th>Field</th><th>Priority</th><th>Deadline</th><th>Pct</th><th>Status</th><th>Tractor</th></tr></thead>
-  <tbody id="jobs"></tbody>
-</table>
-
-<h2>Explanation</h2>
-<p><strong id="headline"></strong></p>
-<p id="summary"></p>
-
-<details>
-  <summary>Raw state JSON</summary>
-  <pre id="raw"></pre>
-</details>
+  <aside>
+    <section class="panel side-section">
+      <h2>Tractors</h2>
+      <div id="tractors" class="tractor-list"><div class="empty">No tractor data</div></div>
+    </section>
+    <section class="panel side-section">
+      <h2>Jobs</h2>
+      <div id="jobs" class="job-list"><div class="empty">No job data</div></div>
+    </section>
+    <details class="panel">
+      <summary>Raw state</summary>
+      <pre id="raw-state"></pre>
+    </details>
+  </aside>
+</main>
 
 <script>
-  function setText(id, value) {
+  const canvas = document.getElementById("farm-map");
+  const ctx = canvas.getContext("2d");
+  let state = null;
+  let polling = false;
+  const displayedPositions = new Map();
+
+  function text(id, value) {
     document.getElementById(id).textContent = value == null ? "" : String(value);
   }
 
-  function fillTable(bodyId, rows, columns) {
-    const body = document.getElementById(bodyId);
-    body.textContent = "";
-    (rows || []).forEach(function (row) {
-      const tr = document.createElement("tr");
-      columns.forEach(function (col) {
-        const td = document.createElement("td");
-        td.textContent = row[col] == null ? "" : String(row[col]);
-        tr.appendChild(td);
-      });
-      body.appendChild(tr);
+  function setConnected(connected, message) {
+    const element = document.getElementById("connection");
+    element.classList.toggle("connected", connected);
+    text("connection-text", message);
+  }
+
+  function resizeCanvas() {
+    const ratio = window.devicePixelRatio || 1;
+    const width = Math.max(1, canvas.clientWidth);
+    const height = Math.max(1, canvas.clientHeight);
+    const pixelWidth = Math.round(width * ratio);
+    const pixelHeight = Math.round(height * ratio);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  }
+
+  function edgeKey(a, b) {
+    return [a, b].sort().join("|");
+  }
+
+  function makeTransform(farm, tractors) {
+    const points = [...(farm.nodes || []), ...(tractors || [])]
+      .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!points.length) return () => ({ x: width / 2, y: height / 2 });
+
+    const xs = points.map(point => point.x);
+    const ys = points.map(point => point.y);
+    let minX = Math.min(...xs), maxX = Math.max(...xs);
+    let minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (minX === maxX) { minX -= 1; maxX += 1; }
+    if (minY === maxY) { minY -= 1; maxY += 1; }
+
+    const padding = 58;
+    const scale = Math.min(
+      (width - padding * 2) / (maxX - minX),
+      (height - padding * 2) / (maxY - minY)
+    );
+    const usedWidth = (maxX - minX) * scale;
+    const usedHeight = (maxY - minY) * scale;
+    const offsetX = (width - usedWidth) / 2;
+    const offsetY = (height - usedHeight) / 2;
+
+    return point => ({
+      x: offsetX + (point.x - minX) * scale,
+      y: height - offsetY - (point.y - minY) * scale,
     });
   }
 
-  function render(state) {
+  function jobForField(jobs, fieldId) {
+    const fieldJobs = (jobs || []).filter(job => job.field === fieldId);
+    return fieldJobs.find(job => job.status === "active")
+      || fieldJobs.find(job => job.status === "pending")
+      || fieldJobs.find(job => job.status === "held")
+      || fieldJobs[fieldJobs.length - 1];
+  }
+
+  function drawRoads(farm, nodes, project) {
+    const blocked = new Set((farm.blocked || []).map(road => edgeKey(road[0], road[1])));
+    for (const road of farm.roads || []) {
+      const a = nodes.get(road[0]);
+      const b = nodes.get(road[1]);
+      if (!a || !b) continue;
+      const pa = project(a), pb = project(b);
+      const isBlocked = blocked.has(edgeKey(road[0], road[1]));
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.lineWidth = isBlocked ? 4 : 5;
+      ctx.strokeStyle = isBlocked ? "#ef6d68" : "#3c5146";
+      ctx.setLineDash(isBlocked ? [8, 6] : []);
+      ctx.stroke();
+      if (!isBlocked) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "#8ca19455";
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+  }
+
+  function drawPlannedRoutes(foreman, nodes, project) {
+    const tractors = new Map((foreman.tractors || []).map(tractor => [tractor.id, tractor]));
+    for (const item of foreman.plan || []) {
+      const tractor = tractors.get(item.tractor);
+      const path = (item.path || []).map(id => nodes.get(id)).filter(Boolean);
+      if (!tractor || path.length < 2) continue;
+      ctx.beginPath();
+      path.forEach((node, index) => {
+        const point = project(node);
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.strokeStyle = (tractor.color || "#ffffff") + "55";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 5]);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  function drawNodes(farm, foreman, nodes, project) {
+    for (const node of farm.nodes || []) {
+      const point = project(node);
+      if (node.kind === "field") {
+        const job = jobForField(foreman.jobs, node.id);
+        const progress = Math.max(0, Math.min(100, Number(job?.pct) || 0));
+        const radius = 15 + Math.min(10, Math.sqrt(Number(node.area_ha) || 1));
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = job?.status === "active" ? "#254b34" : "#27372f";
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#6f927d";
+        ctx.stroke();
+
+        if (progress > 0) {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, radius + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress / 100);
+          ctx.strokeStyle = progress >= 100 ? "#67c587" : "#f0ae4d";
+          ctx.lineWidth = 4;
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#edf5ef";
+        ctx.font = "600 11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(node.name || node.id, point.x, point.y - radius - 10);
+        ctx.fillStyle = "#b5c5bb";
+        ctx.font = "10px system-ui";
+        ctx.fillText(job ? `${job.type} ${progress}%` : `${node.area_ha || "?"} ha`, point.x, point.y + 4);
+      } else if (node.kind === "depot") {
+        ctx.fillStyle = "#f0ae4d";
+        ctx.fillRect(point.x - 8, point.y - 8, 16, 16);
+        ctx.fillStyle = "#edf5ef";
+        ctx.font = "600 11px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(node.name || "Yard", point.x, point.y - 15);
+      } else {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#8ca194";
+        ctx.fill();
+      }
+    }
+  }
+
+  function smoothTractors(tractors) {
+    const currentIds = new Set();
+    return (tractors || []).map(tractor => {
+      currentIds.add(tractor.id);
+      const targetX = Number(tractor.x) || 0;
+      const targetY = Number(tractor.y) || 0;
+      const current = displayedPositions.get(tractor.id) || { x: targetX, y: targetY };
+      current.x += (targetX - current.x) * 0.14;
+      current.y += (targetY - current.y) * 0.14;
+      displayedPositions.set(tractor.id, current);
+      return { ...tractor, x: current.x, y: current.y };
+    }).filter(tractor => Number.isFinite(tractor.x) && Number.isFinite(tractor.y));
+  }
+
+  function drawTractors(tractors, project) {
+    for (const tractor of tractors) {
+      const point = project(tractor);
+      const heading = Number(tractor.heading) || 0;
+      const color = tractor.status === "broken" ? "#ef6d68" : (tractor.color || "#ffffff");
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.rotate(heading);
+      ctx.beginPath();
+      ctx.moveTo(13, 0);
+      ctx.lineTo(-9, -8);
+      ctx.lineTo(-6, 0);
+      ctx.lineTo(-9, 8);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#101512";
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.font = "600 11px system-ui";
+      ctx.textAlign = "left";
+      const label = `${tractor.name || tractor.id} · ${tractor.status || "unknown"}`;
+      const labelWidth = ctx.measureText(label).width + 12;
+      ctx.fillStyle = "#111714dd";
+      ctx.fillRect(point.x + 12, point.y - 22, labelWidth, 18);
+      ctx.fillStyle = "#edf5ef";
+      ctx.fillText(label, point.x + 18, point.y - 9);
+    }
+  }
+
+  function drawMap() {
+    resizeCanvas();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#18231d";
+    ctx.fillRect(0, 0, width, height);
+
+    if (!state) {
+      ctx.fillStyle = "#9fb0a5";
+      ctx.font = "14px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("Waiting for farm state…", width / 2, height / 2);
+      return;
+    }
+
     const farm = state.farm || {};
     const foreman = state.foreman || {};
-    const explanation = foreman.explanation || {};
-    setText("farm", "Farm: " + (farm.name || "(none)"));
-    setText("clock", state.clock);
-    setText("running", state.running ? "yes" : "no");
-    fillTable("tractors", foreman.tractors, ["name", "status", "job", "fuel_pct", "mounted"]);
-    fillTable("jobs", foreman.jobs, ["id", "type", "field", "priority", "deadline", "pct", "status", "tractor"]);
-    setText("headline", explanation.headline);
-    setText("summary", explanation.summary);
-    setText("raw", JSON.stringify(state, null, 2));
+    const tractors = smoothTractors(foreman.tractors);
+    const nodes = new Map((farm.nodes || []).map(node => [node.id, node]));
+    const project = makeTransform(farm, tractors);
+    drawRoads(farm, nodes, project);
+    drawPlannedRoutes(foreman, nodes, project);
+    drawNodes(farm, foreman, nodes, project);
+    drawTractors(tractors, project);
+  }
+
+  function renderLists() {
+    if (!state) return;
+    const foreman = state.foreman || {};
+    const jobsById = new Map((foreman.jobs || []).map(job => [job.id, job]));
+    const tractorContainer = document.getElementById("tractors");
+    tractorContainer.textContent = "";
+    for (const tractor of foreman.tractors || []) {
+      const job = jobsById.get(tractor.job);
+      const card = document.createElement("div");
+      card.className = "tractor-card";
+      const title = document.createElement("div");
+      title.className = "tractor-title";
+      const name = document.createElement("strong");
+      name.className = "tractor-name";
+      const color = document.createElement("span");
+      color.className = "tractor-color";
+      color.style.background = tractor.color || "#ffffff";
+      name.append(color, document.createTextNode(tractor.name || tractor.id));
+      const badge = document.createElement("span");
+      badge.className = `badge ${tractor.status || ""}`;
+      badge.textContent = tractor.status || "unknown";
+      title.append(name, badge);
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `${tractor.job || "No job"} · ${tractor.mounted || "No implement"} · Fuel ${tractor.fuel_pct ?? "?"}%`;
+      card.append(title, meta);
+      if (job) {
+        const progress = document.createElement("div");
+        progress.className = "progress";
+        const fill = document.createElement("span");
+        fill.style.width = `${Math.max(0, Math.min(100, Number(job.pct) || 0))}%`;
+        progress.append(fill);
+        card.append(progress);
+      }
+      tractorContainer.append(card);
+    }
+    if (!(foreman.tractors || []).length) tractorContainer.innerHTML = '<div class="empty">No tractor data</div>';
+
+    const jobContainer = document.getElementById("jobs");
+    jobContainer.textContent = "";
+    for (const job of foreman.jobs || []) {
+      const row = document.createElement("div");
+      row.className = "job-row";
+      const title = document.createElement("div");
+      title.className = "job-title";
+      const name = document.createElement("strong");
+      name.textContent = `${job.id} · ${job.type}`;
+      const pct = document.createElement("span");
+      pct.textContent = `${Math.round(Number(job.pct) || 0)}%`;
+      title.append(name, pct);
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `${job.field} · ${job.status || "unknown"} · ${job.tractor || "unassigned"}`;
+      const progress = document.createElement("div");
+      progress.className = "progress";
+      const fill = document.createElement("span");
+      fill.style.width = `${Math.max(0, Math.min(100, Number(job.pct) || 0))}%`;
+      progress.append(fill);
+      row.append(title, meta, progress);
+      jobContainer.append(row);
+    }
+    if (!(foreman.jobs || []).length) jobContainer.innerHTML = '<div class="empty">No job data</div>';
+  }
+
+  function renderState(nextState) {
+    state = nextState;
+    const farm = state.farm || {};
+    text("farm-name", farm.name || "Foreman");
+    text("clock", state.clock || "--:--");
+    text("run-state", state.running ? "Running" : "Paused");
+    text("map-label", `${(farm.nodes || []).filter(node => node.kind === "field").length} fields · ${(state.foreman?.tractors || []).length} tractors`);
+    text("raw-state", JSON.stringify(state, null, 2));
+    const speed = document.getElementById("speed");
+    if (state.speed != null && [...speed.options].some(option => Number(option.value) === Number(state.speed))) {
+      speed.value = String(state.speed);
+    }
+    renderLists();
   }
 
   async function poll() {
+    if (polling) return;
+    polling = true;
     try {
-      const response = await fetch("/api/state");
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const state = await response.json();
-      setText("connection", "");
-      render(state);
-    } catch (err) {
-      setText("connection", "Server not reachable");
-      document.getElementById("connection").className = "status error";
+      const response = await fetch("/api/state", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      renderState(await response.json());
+      setConnected(true, "Live");
+    } catch (error) {
+      setConnected(false, "Server unavailable");
+    } finally {
+      polling = false;
     }
+  }
+
+  async function control(action) {
+    const buttons = document.querySelectorAll("button[data-action]");
+    buttons.forEach(button => { button.disabled = true; });
+    text("control-error", "");
+    try {
+      const response = await fetch("/api/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, speed: Number(document.getElementById("speed").value) }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await poll();
+    } catch (error) {
+      text("control-error", `Control failed: ${error.message}`);
+    } finally {
+      buttons.forEach(button => { button.disabled = false; });
+    }
+  }
+
+  document.querySelectorAll("button[data-action]").forEach(button => {
+    button.addEventListener("click", () => control(button.dataset.action));
+  });
+  new ResizeObserver(resizeCanvas).observe(canvas);
+  window.addEventListener("resize", resizeCanvas);
+
+  function animate() {
+    drawMap();
+    requestAnimationFrame(animate);
   }
 
   poll();
   setInterval(poll, 500);
+  requestAnimationFrame(animate);
 </script>
 </body>
 </html>
