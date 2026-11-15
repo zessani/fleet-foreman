@@ -40,9 +40,9 @@ is broken, and we beat "first come, first served".
 - [x] Farm map with tractors moving and field progress
 
 ### Vishva
-- [ ] Sample farm file: 3 tractors, 8 fields, 10 jobs
-- [ ] Farm file checker
-- [ ] Numbers panel
+- [x] Sample farm file: 3 tractors, 8 fields, 10 jobs
+- [x] Farm file checker
+- [x] Numbers panel
 - [ ] Deck started
 
 **Merge 1 at 2:00**
@@ -63,9 +63,9 @@ Done when: we can break any tractor and the plan repairs with no human.
 - [x] Breakdown test cases
 
 ### Vishva
-- [ ] Random farm maker
-- [ ] Export event log and comparison numbers
-- [ ] Tests for the basic rules
+- [x] Random farm maker
+- [x] Export event log and comparison numbers
+- [x] Tests for the basic rules
 - [ ] Deck: problem, product, architecture
 
 **Merge 2 at 3:00**

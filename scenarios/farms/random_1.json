@@ -1,0 +1,377 @@
+{
+  "name": "Red Rock Farm (random, seed 1)",
+  "day_start_min": 360,
+  "horizon_min": 660,
+  "nodes": [
+    {
+      "id": "YARD",
+      "kind": "depot",
+      "name": "Yard",
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "id": "F1",
+      "kind": "field",
+      "name": "North 40",
+      "x": -3.21,
+      "y": 3.05,
+      "area_ha": 16,
+      "crop": "lettuce"
+    },
+    {
+      "id": "F2",
+      "kind": "field",
+      "name": "East Orchard",
+      "x": -2.15,
+      "y": -0.04,
+      "area_ha": 11,
+      "crop": "citrus"
+    },
+    {
+      "id": "F3",
+      "kind": "field",
+      "name": "River Flat",
+      "x": 1.33,
+      "y": 2.54,
+      "area_ha": 5,
+      "crop": "citrus"
+    },
+    {
+      "id": "F4",
+      "kind": "field",
+      "name": "West Bench",
+      "x": -4.14,
+      "y": 2.95,
+      "area_ha": 10,
+      "crop": "sorghum"
+    },
+    {
+      "id": "F5",
+      "kind": "field",
+      "name": "Mesa Top",
+      "x": 2.3,
+      "y": -4.38,
+      "area_ha": 11,
+      "crop": "alfalfa"
+    },
+    {
+      "id": "F6",
+      "kind": "field",
+      "name": "South Pivot",
+      "x": 1.95,
+      "y": -2.38,
+      "area_ha": 5,
+      "crop": "alfalfa"
+    },
+    {
+      "id": "F7",
+      "kind": "field",
+      "name": "Canal Strip",
+      "x": -4.13,
+      "y": -4.17,
+      "area_ha": 12,
+      "crop": "lettuce"
+    },
+    {
+      "id": "F8",
+      "kind": "field",
+      "name": "Mesquite Corner",
+      "x": 3.86,
+      "y": -1.04,
+      "area_ha": 7,
+      "crop": "citrus"
+    },
+    {
+      "id": "X1",
+      "kind": "junction",
+      "x": 1.39,
+      "y": 0.17
+    },
+    {
+      "id": "X2",
+      "kind": "junction",
+      "x": 0.33,
+      "y": -0.95
+    }
+  ],
+  "roads": [
+    [
+      "F1",
+      "F2"
+    ],
+    [
+      "F1",
+      "F4"
+    ],
+    [
+      "F2",
+      "F7"
+    ],
+    [
+      "F2",
+      "YARD"
+    ],
+    [
+      "F3",
+      "X1"
+    ],
+    [
+      "F3",
+      "YARD"
+    ],
+    [
+      "F5",
+      "F6"
+    ],
+    [
+      "F6",
+      "F8"
+    ],
+    [
+      "F6",
+      "X2"
+    ],
+    [
+      "F7",
+      "X2"
+    ],
+    [
+      "X1",
+      "YARD"
+    ],
+    [
+      "X2",
+      "YARD"
+    ]
+  ],
+  "implements": [
+    {
+      "id": "sprayer_18",
+      "type": "spray",
+      "name": "18 m boom sprayer",
+      "width_m": 18,
+      "speed_kmh": 12,
+      "min_hp": 100,
+      "efficiency": 0.8
+    },
+    {
+      "id": "sprayer_24",
+      "type": "spray",
+      "name": "24 m boom sprayer",
+      "width_m": 24,
+      "speed_kmh": 12,
+      "min_hp": 120,
+      "efficiency": 0.8
+    },
+    {
+      "id": "mower_4",
+      "type": "mow",
+      "name": "4 m disc mower",
+      "width_m": 4,
+      "speed_kmh": 14,
+      "min_hp": 90,
+      "efficiency": 0.85
+    },
+    {
+      "id": "mower_6",
+      "type": "mow",
+      "name": "6 m disc mower",
+      "width_m": 6,
+      "speed_kmh": 14,
+      "min_hp": 110,
+      "efficiency": 0.85
+    },
+    {
+      "id": "disc_4",
+      "type": "till",
+      "name": "4 m tandem disc",
+      "width_m": 4,
+      "speed_kmh": 9,
+      "min_hp": 130,
+      "efficiency": 0.85
+    },
+    {
+      "id": "disc_6",
+      "type": "till",
+      "name": "6 m tandem disc",
+      "width_m": 6,
+      "speed_kmh": 9,
+      "min_hp": 160,
+      "efficiency": 0.85
+    },
+    {
+      "id": "planter_6",
+      "type": "plant",
+      "name": "6 m row planter",
+      "width_m": 6,
+      "speed_kmh": 8,
+      "min_hp": 140,
+      "efficiency": 0.75
+    },
+    {
+      "id": "planter_8",
+      "type": "plant",
+      "name": "8 m row planter",
+      "width_m": 8,
+      "speed_kmh": 8,
+      "min_hp": 160,
+      "efficiency": 0.75
+    }
+  ],
+  "tractors": [
+    {
+      "id": "T1",
+      "name": "Atlas",
+      "hp": 210,
+      "implements": [
+        "disc_4",
+        "sprayer_24",
+        "planter_8"
+      ],
+      "mounted": "disc_4",
+      "speed_kmh": 26,
+      "fuel_capacity": 340,
+      "fuel": 340,
+      "burn_km": 0.55,
+      "burn_work": 0.41,
+      "node": "YARD"
+    },
+    {
+      "id": "T2",
+      "name": "Bolt",
+      "hp": 180,
+      "implements": [
+        "disc_6",
+        "planter_8",
+        "mower_4"
+      ],
+      "mounted": "disc_6",
+      "speed_kmh": 32,
+      "fuel_capacity": 320,
+      "fuel": 320,
+      "burn_km": 0.52,
+      "burn_work": 0.37,
+      "node": "YARD"
+    },
+    {
+      "id": "T3",
+      "name": "Cedar",
+      "hp": 170,
+      "implements": [
+        "mower_4",
+        "sprayer_24"
+      ],
+      "mounted": "mower_4",
+      "speed_kmh": 32,
+      "fuel_capacity": 340,
+      "fuel": 340,
+      "burn_km": 0.53,
+      "burn_work": 0.4,
+      "node": "YARD"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "J1",
+      "type": "mow",
+      "field": "F6",
+      "priority": 1,
+      "deadline": 530,
+      "release": 0,
+      "after": null
+    },
+    {
+      "id": "J2",
+      "type": "till",
+      "field": "F7",
+      "priority": 5,
+      "deadline": 230,
+      "release": 0,
+      "after": null
+    },
+    {
+      "id": "J3",
+      "type": "spray",
+      "field": "F4",
+      "priority": 5,
+      "deadline": 380,
+      "release": 0,
+      "after": null
+    },
+    {
+      "id": "J4",
+      "type": "till",
+      "field": "F4",
+      "priority": 4,
+      "deadline": 370,
+      "release": 0,
+      "after": null
+    },
+    {
+      "id": "J5",
+      "type": "till",
+      "field": "F6",
+      "priority": 3,
+      "deadline": 570,
+      "release": 0,
+      "after": null
+    },
+    {
+      "id": "J6",
+      "type": "plant",
+      "field": "F6",
+      "priority": 1,
+      "deadline": 660,
+      "release": 0,
+      "after": "J5"
+    },
+    {
+      "id": "J7",
+      "type": "mow",
+      "field": "F4",
+      "priority": 1,
+      "deadline": 260,
+      "release": 0,
+      "after": null
+    },
+    {
+      "id": "J8",
+      "type": "till",
+      "field": "F5",
+      "priority": 1,
+      "deadline": 240,
+      "release": 40,
+      "after": null
+    },
+    {
+      "id": "J9",
+      "type": "plant",
+      "field": "F5",
+      "priority": 3,
+      "deadline": 600,
+      "release": 0,
+      "after": "J8"
+    },
+    {
+      "id": "J10",
+      "type": "plant",
+      "field": "F4",
+      "priority": 2,
+      "deadline": 540,
+      "release": 0,
+      "after": null
+    }
+  ],
+  "truth": {
+    "*|plant|F6": 0.87,
+    "*|spray|F4": 0.81
+  },
+  "events": [
+    {
+      "at": 285,
+      "type": "breakdown",
+      "tractor": "T1"
+    }
+  ]
+}
