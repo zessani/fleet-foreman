@@ -30,39 +30,46 @@
     Safety: "#67c587", Recovery: "#ef8d68",
   };
 
+  // Sizes come from the box the panel sits in (container queries), so it also
+  // works in a narrow sidebar and not only at full page width.
   const CSS = `
+.dp-host { container-type: inline-size; }
 .dp { --dp-panel: #19221e; --dp-panel2: #202c26; --dp-line: #34453c; --dp-text: #edf5ef;
   --dp-muted: #9fb0a5; --dp-accent: #f0ae4d; --dp-good: #67c587; --dp-bad: #ef6d68;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--dp-text);
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px; box-sizing: border-box; }
-@media (max-width: 760px) { .dp { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 760px) {
+  .dp { grid-template-columns: minmax(0, 1fr); }
+  .dp-log-line { grid-template-columns: 4.2em minmax(0, 1fr); }
+  .dp-log-line > :last-child { grid-column: 1 / -1; }
+}
 .dp * { box-sizing: border-box; }
 .dp-card { background: var(--dp-panel); border: 1px solid var(--dp-line); border-radius: 8px;
   padding: 14px 16px; min-width: 0; }
 .dp-wide { grid-column: 1 / -1; }
-.dp-title { margin: 0 0 10px; font-size: clamp(12px, 1.1vw, 15px); font-weight: 700;
+.dp-title { margin: 0 0 10px; font-size: clamp(12px, 1.1cqi, 15px); font-weight: 700;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--dp-muted);
   display: flex; justify-content: space-between; gap: 12px; }
-.dp-headline { font-size: clamp(20px, 2.4vw, 34px); font-weight: 700; line-height: 1.2;
+.dp-headline { font-size: clamp(20px, 2.4cqi, 34px); font-weight: 700; line-height: 1.2;
   margin: 0 0 8px; }
-.dp-summary { font-size: clamp(16px, 1.7vw, 24px); margin: 0 0 12px; }
+.dp-summary { font-size: clamp(16px, 1.7cqi, 24px); margin: 0 0 12px; }
 .dp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .dp-chip { background: var(--dp-panel2); border: 1px solid var(--dp-line); border-radius: 6px;
-  padding: 6px 12px; font-size: clamp(14px, 1.4vw, 20px); font-variant-numeric: tabular-nums; }
+  padding: 6px 12px; font-size: clamp(14px, 1.4cqi, 20px); font-variant-numeric: tabular-nums; }
 .dp-chip b { font-size: 1.25em; margin-right: 6px; }
 .dp-chip.dp-strong { border-color: var(--dp-accent); color: var(--dp-accent); }
 .dp-list { list-style: none; margin: 0; padding: 0; }
 .dp-list li { padding: 8px 0; border-top: 1px solid var(--dp-line);
-  font-size: clamp(15px, 1.5vw, 21px); line-height: 1.35; }
+  font-size: clamp(15px, 1.5cqi, 21px); line-height: 1.35; }
 .dp-badge { display: inline-block; border-radius: 6px; padding: 6px 14px; font-weight: 800;
-  font-size: clamp(20px, 2.4vw, 34px); letter-spacing: 0.03em; margin-bottom: 6px; }
+  font-size: clamp(20px, 2.4cqi, 34px); letter-spacing: 0.03em; margin-bottom: 6px; }
 .dp-pass { background: #1f3a2a; color: var(--dp-good); border: 1px solid var(--dp-good); }
 .dp-fail { background: #40201f; color: var(--dp-bad); border: 1px solid var(--dp-bad); }
 .dp-none { background: var(--dp-panel2); color: var(--dp-muted); border: 1px solid var(--dp-line); }
-.dp-line { font-size: clamp(14px, 1.4vw, 19px); color: var(--dp-muted); margin: 0 0 10px; }
+.dp-line { font-size: clamp(14px, 1.4cqi, 19px); color: var(--dp-muted); margin: 0 0 10px; }
 .dp-check { display: grid; grid-template-columns: 1.6em minmax(0, 1fr); gap: 4px 6px;
-  padding: 6px 0; border-top: 1px solid var(--dp-line); font-size: clamp(14px, 1.4vw, 19px); }
+  padding: 6px 0; border-top: 1px solid var(--dp-line); font-size: clamp(15px, 1.7cqi, 23px); }
 .dp-mark { font-weight: 800; font-size: 1.2em; line-height: 1.1; }
 .dp-mark.dp-ok { color: var(--dp-good); }
 .dp-mark.dp-no { color: var(--dp-bad); }
@@ -70,12 +77,12 @@
 .dp-detail { color: var(--dp-muted); font-size: 0.88em; }
 .dp-log { max-height: 46vh; overflow-y: auto; }
 .dp-log-line { display: grid; grid-template-columns: 4.2em 7.6em minmax(0, 1fr); gap: 10px;
-  padding: 6px 0; border-top: 1px solid var(--dp-line); font-size: clamp(13px, 1.3vw, 18px);
+  padding: 6px 0; border-top: 1px solid var(--dp-line); font-size: clamp(13px, 1.3cqi, 18px);
   line-height: 1.35; }
 .dp-time { color: var(--dp-muted); font-variant-numeric: tabular-nums; }
 .dp-agent { font-weight: 700; }
 .dp-reasoning { min-height: 110px; border: 1px dashed var(--dp-line); border-radius: 6px;
-  padding: 12px; color: var(--dp-muted); font-size: clamp(14px, 1.4vw, 19px);
+  padding: 12px; color: var(--dp-muted); font-size: clamp(14px, 1.4cqi, 19px);
   white-space: pre-wrap; }
 .dp-reasoning.dp-filled { color: var(--dp-text); border-style: solid; }
 .dp-status { grid-column: 1 / -1; font-size: 13px; color: var(--dp-muted); min-height: 1em; }
@@ -113,8 +120,10 @@
       root.id = "decisions-panel";
       document.body.appendChild(root);
     }
-    root.classList.add("dp");
+    root.classList.add("dp-host");
     root.textContent = "";
+    const grid = el("div", "dp");
+    root.append(grid);
 
     const change = card("Latest plan change", true);
     const headline = el("p", "dp-headline");
@@ -138,7 +147,7 @@
     log.box.append(logBody);
 
     const status = el("div", "dp-status");
-    root.append(change.box, safety.box, reasoning.box, log.box, status);
+    grid.append(change.box, safety.box, reasoning.box, log.box, status);
 
     parts = { headline, summary, chips, changes, changeNote: change.note, badge, safetyLine,
               checks, safetyNote: safety.note, reasoningBody, reasoningNote: reasoning.note,
@@ -177,10 +186,12 @@
       parts.chips.append(chip(moved, moved === 1 ? "job moved" : "jobs moved", moved > 0));
       parts.chips.append(chip(retimed + unchanged, "stayed with their tractor"));
       if (retimed) parts.chips.append(chip(retimed, "of those retimed"));
-      if (story.held) parts.chips.append(chip(story.held, "held", true));
     } else if (planNo === 1) {
-      parts.chips.append(chip((story.changes || []).length, "jobs in the first plan of the day"));
+      // The first plan lists one sentence per planned job and one per held job.
+      const planned = (story.changes || []).length - (story.held || 0);
+      parts.chips.append(chip(planned, "jobs in the first plan of the day"));
     }
+    if (story.held) parts.chips.append(chip(story.held, "held", true));
     if (story.ms != null) {
       const ms = el("span", "dp-chip");
       ms.append(el("b", null, String(story.ms) + " ms"),
@@ -197,7 +208,7 @@
   function renderSafety(foreman) {
     const safety = foreman.safety || {};
     const checks = safety.checks || [];
-    if (!changed("safety", JSON.stringify(safety))) return;
+    if (!changed("safety", JSON.stringify([safety, foreman.plan_no]))) return;
 
     const hardFailed = checks.filter(c => !c.passed && c.severity !== "warning").length;
     const passedCount = checks.filter(c => c.passed).length;
@@ -213,7 +224,8 @@
     }
     parts.safetyNote.textContent = checks.length ? passedCount + " of " + checks.length : "";
     parts.safetyLine.textContent = safety.passed === false
-      ? hardFailed + " rule(s) broken. This plan was not sent to the tractors."
+      ? hardFailed + " rule(s) broken. The newest plan was rejected and not sent. Plan " +
+        (foreman.plan_no || 0) + " is still in force."
       : safety.passed === true
         ? "Every plan is checked against the nine rules before it is sent. No human approves it."
         : "";
@@ -227,7 +239,8 @@
       mark.setAttribute("aria-label", check.passed ? "passed" : warning ? "warning" : "failed");
       const body = el("div");
       body.append(el("div", null, check.id + ". " + check.name));
-      if (check.detail) body.append(el("div", "dp-detail", check.detail));
+      // Evidence only where it matters: a passed check is just its tick and name.
+      if (check.detail && !check.passed) body.append(el("div", "dp-detail", check.detail));
       row.append(mark, body);
       parts.checks.append(row);
     });
