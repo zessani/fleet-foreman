@@ -46,7 +46,7 @@
     {
       "t": 0.0,
       "plan_no": 1,
-      "ms": 88.0,
+      "ms": 78.93,
       "events": [
         "jobs_submitted"
       ],
@@ -59,7 +59,7 @@
     {
       "t": 210.0,
       "plan_no": 2,
-      "ms": 4.45,
+      "ms": 3.92,
       "events": [
         "breakdown"
       ],

@@ -10,7 +10,7 @@ Day plan ready at 06:00.
 
 Safety gate passed 9 of 9 checks.
 
-Re-plan time: 9.6 ms from event to new plan.
+Re-plan time: 9.3 ms from event to new plan.
 
 - Spray North 40: Bolt with the 24 m boom sprayer, 06:05 to 06:47, 73 min before its 08:00 deadline.
 - Spray East Orchard: Bolt with the 24 m boom sprayer, 07:20 to 07:51, 128 min before its 10:00 deadline.
@@ -46,7 +46,7 @@ Day plan ready at 06:00.
 
 Safety gate passed 8 of 9 checks.
 
-Re-plan time: 360.7 ms from event to new plan.
+Re-plan time: 359.3 ms from event to new plan.
 
 - Mow River Flat: Bolt with the 6 m disc mower, 13:02 to 14:43, 7 min before its 14:50 deadline.
 - Spray Mesa Top: Atlas with the 18 m boom sprayer, 06:51 to 07:33, 67 min before its 08:40 deadline.
@@ -82,7 +82,7 @@ Ember went down at 11:15 while planting Windmill (23% done).
 
 Safety gate passed 8 of 9 checks.
 
-Re-plan time: 11.6 ms from event to new plan.
+Re-plan time: 12.4 ms from event to new plan.
 
 - Till West Bench: moves from Cedar to Bolt. Finishes 18:10, 140 min past its 15:50 deadline.
 - Plant West Bench: moves from Cedar to Dune. Finishes 20:40, 220 min past its 17:00 deadline.

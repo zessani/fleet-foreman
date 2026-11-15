@@ -8,7 +8,7 @@ Day plan ready at 06:00.
 
 Safety gate passed 8 of 9 checks.
 
-Re-plan time: 88.0 ms from event to new plan.
+Re-plan time: 78.9 ms from event to new plan.
 
 - Spray North 40: Bolt with the 24 m boom sprayer, 06:05 to 06:47, 43 min before its 07:30 deadline.
 - Spray East Orchard: Bolt with the 24 m boom sprayer, 07:20 to 07:51, 68 min before its 09:00 deadline.
@@ -37,7 +37,7 @@ Cedar went down at 09:30 during a stop at the yard.
 
 Safety gate passed 8 of 9 checks.
 
-Re-plan time: 4.5 ms from event to new plan.
+Re-plan time: 3.9 ms from event to new plan.
 
 - Plant West Bench: moves from Cedar to Atlas. Finishes 18:47, 318 min past its 13:30 deadline.
 - Plant South Pivot: moves from Cedar to Atlas. Finishes 16:32, 152 min past its 14:00 deadline.
