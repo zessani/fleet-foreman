@@ -84,7 +84,7 @@ Goal: the numbers and finish that make it feel like a real product.
 - [ ] Map polish
 
 ### Vishva
-- [ ] Accuracy chart
+- [x] Accuracy chart
 - [ ] "Why?" panel
 - [ ] Screenshots and numbers in the deck
 - [ ] README finished
