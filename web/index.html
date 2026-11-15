@@ -71,7 +71,7 @@
 
   main {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 310px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: 12px;
     padding: 12px;
     min-height: calc(100vh - 117px);
@@ -81,8 +81,15 @@
     border: 1px solid var(--line);
     border-radius: 8px;
   }
-  .map-panel { position: relative; min-height: 520px; overflow: hidden; }
-  #farm-map { display: block; width: 100%; height: 100%; min-height: 520px; }
+  .map-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .summary-card { padding: 10px 12px; }
+  .summary-label { color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+  .summary-value { margin-top: 3px; font-size: 18px; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .summary-value.good { color: var(--good); }
+  .summary-value.bad { color: var(--danger); }
+  .map-panel { position: relative; min-height: 560px; overflow: hidden; }
+  #farm-map { display: block; width: 100%; height: 100%; min-height: 560px; }
   .map-label {
     position: absolute;
     top: 12px;
@@ -117,6 +124,17 @@
 
   aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .side-section { padding: 14px; }
+  .operation { display: grid; gap: 6px; margin-top: 10px; }
+  .operation:first-of-type { margin-top: 0; }
+  .operation label { color: var(--muted); font-size: 11px; }
+  .operation-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .operation-row select { min-width: 0; width: 100%; }
+  .priority-row { grid-template-columns: minmax(0, 1fr) 64px auto; }
+  .event-result { min-height: 16px; margin-top: 8px; color: var(--good); font-size: 11px; }
+  .event-result.error { color: #ffc0bd; }
+  .explanation-headline { line-height: 1.4; font-weight: 650; }
+  .explanation-change { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+  .safety-line { margin-top: 9px; color: var(--good); font-size: 11px; }
   .tractor-list, .job-list { display: grid; gap: 8px; }
   .tractor-card, .job-row {
     padding: 9px;
@@ -138,6 +156,7 @@
   .badge.working { color: #a7e8bd; background: #204b31; }
   .badge.traveling { color: #b9d9ff; background: #244466; }
   .badge.broken { color: #ffc0bd; background: #602c2a; }
+  .priority { color: var(--accent); font-weight: 700; }
   .meta { margin-top: 5px; color: var(--muted); font-size: 11px; }
   .progress { height: 5px; margin-top: 8px; overflow: hidden; background: #304037; border-radius: 3px; }
   .progress > span { display: block; height: 100%; background: var(--good); }
@@ -159,6 +178,7 @@
     .clock { order: -1; width: 100%; margin: 0; }
     main { padding: 8px; }
     aside { display: flex; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
@@ -193,21 +213,58 @@
 </div>
 
 <main>
-  <section class="panel map-panel" aria-label="Farm map">
-    <canvas id="farm-map"></canvas>
-    <div class="map-label" id="map-label">Waiting for farm data</div>
-    <div class="legend">
-      <span class="key"><span class="swatch"></span>Field</span>
-      <span class="key"><span class="swatch working"></span>Active</span>
-      <span class="key"><span class="swatch broken"></span>Broken</span>
-      <span class="key"><span class="swatch blocked"></span>Blocked road</span>
-    </div>
-  </section>
+  <div class="map-column">
+    <section class="summary-grid" aria-label="Operations summary">
+      <div class="panel summary-card"><div class="summary-label">Plan</div><div id="summary-plan" class="summary-value">—</div></div>
+      <div class="panel summary-card"><div class="summary-label">Safety</div><div id="summary-safety" class="summary-value">—</div></div>
+      <div class="panel summary-card"><div class="summary-label">Jobs done</div><div id="summary-jobs" class="summary-value">—</div></div>
+      <div class="panel summary-card"><div class="summary-label">Re-plan</div><div id="summary-replan" class="summary-value">—</div></div>
+    </section>
+    <section class="panel map-panel" aria-label="Farm map">
+      <canvas id="farm-map"></canvas>
+      <div class="map-label" id="map-label">Waiting for farm data</div>
+      <div class="legend">
+        <span class="key"><span class="swatch"></span>Field</span>
+        <span class="key"><span class="swatch working"></span>Active</span>
+        <span class="key"><span class="swatch broken"></span>Broken</span>
+        <span class="key"><span class="swatch blocked"></span>Blocked road</span>
+      </div>
+    </section>
+  </div>
 
   <aside>
     <section class="panel side-section">
+      <h2>Live events</h2>
+      <div class="operation">
+        <label for="road-select">Road</label>
+        <div class="operation-row">
+          <select id="road-select" aria-label="Road to block or open"></select>
+          <button id="road-button">Block road</button>
+        </div>
+      </div>
+      <div class="operation">
+        <label for="priority-job">Job priority</label>
+        <div class="operation-row priority-row">
+          <select id="priority-job" aria-label="Job to reprioritize"></select>
+          <select id="priority-value" aria-label="New priority">
+            <option value="1">P1</option><option value="2">P2</option>
+            <option value="3">P3</option><option value="4">P4</option>
+            <option value="5">P5</option>
+          </select>
+          <button id="priority-button">Apply</button>
+        </div>
+      </div>
+      <div id="event-result" class="event-result" role="status"></div>
+    </section>
+    <section class="panel side-section">
       <h2>Tractors</h2>
       <div id="tractors" class="tractor-list"><div class="empty">No tractor data</div></div>
+    </section>
+    <section class="panel side-section">
+      <h2>Latest plan change</h2>
+      <div id="explanation-headline" class="explanation-headline empty">No plan change yet</div>
+      <div id="explanation-changes"></div>
+      <div id="safety-line" class="safety-line"></div>
     </section>
     <section class="panel side-section">
       <h2>Jobs</h2>
@@ -402,7 +459,7 @@
       const color = tractor.status === "broken" ? "#ef6d68" : (tractor.color || "#ffffff");
       ctx.save();
       ctx.translate(point.x, point.y);
-      ctx.rotate(heading);
+      ctx.rotate(heading * Math.PI / 180);
       ctx.beginPath();
       ctx.moveTo(13, 0);
       ctx.lineTo(-9, -8);
@@ -434,6 +491,15 @@
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#18231d";
     ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = "#233129";
+    ctx.lineWidth = 1;
+    for (let x = 24; x < width; x += 36) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+    }
+    for (let y = 24; y < height; y += 36) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+    }
 
     if (!state) {
       ctx.fillStyle = "#9fb0a5";
@@ -506,7 +572,13 @@
       title.append(name, pct);
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `${job.field} · ${job.status || "unknown"} · ${job.tractor || "unassigned"}`;
+      meta.append(document.createTextNode(
+        `${job.field} · ${job.status || "unknown"} · ${job.tractor || "unassigned"} · `
+      ));
+      const priority = document.createElement("span");
+      priority.className = "priority";
+      priority.textContent = `P${job.priority ?? "?"}`;
+      meta.append(priority);
       const progress = document.createElement("div");
       progress.className = "progress";
       const fill = document.createElement("span");
@@ -537,13 +609,86 @@
     button.disabled = !preferred;
   }
 
+  function replaceOptions(select, values) {
+    const selected = select.value;
+    const signature = values.map(value => `${value.value}:${value.label}`).join("|");
+    if (select.dataset.signature === signature) return;
+    select.textContent = "";
+    for (const value of values) {
+      const option = document.createElement("option");
+      option.value = value.value;
+      option.textContent = value.label;
+      select.append(option);
+    }
+    select.dataset.signature = signature;
+    if (values.some(value => value.value === selected)) select.value = selected;
+  }
+
+  function renderEventControls() {
+    const farm = state?.farm || {};
+    const foreman = state?.foreman || {};
+    const nodeNames = new Map((farm.nodes || []).map(node => [node.id, node.name || node.id]));
+    const roadSelect = document.getElementById("road-select");
+    replaceOptions(roadSelect, (farm.roads || []).map(([a, b]) => ({
+      value: edgeKey(a, b),
+      label: `${nodeNames.get(a) || a} ↔ ${nodeNames.get(b) || b}`,
+    })));
+    const blocked = new Set((farm.blocked || []).map(([a, b]) => edgeKey(a, b)));
+    const selectedRoadBlocked = blocked.has(roadSelect.value);
+    const roadButton = document.getElementById("road-button");
+    roadButton.textContent = selectedRoadBlocked ? "Open road" : "Block road";
+    roadButton.classList.toggle("danger", !selectedRoadBlocked);
+    roadButton.disabled = !roadSelect.value;
+
+    const jobSelect = document.getElementById("priority-job");
+    replaceOptions(jobSelect, (foreman.jobs || []).map(job => ({
+      value: job.id,
+      label: `${job.id} · ${job.type} · P${job.priority}`,
+    })));
+    if (document.activeElement !== document.getElementById("priority-value")) {
+      const job = (foreman.jobs || []).find(item => item.id === jobSelect.value);
+      if (job) document.getElementById("priority-value").value = String(job.priority);
+    }
+    document.getElementById("priority-button").disabled = !jobSelect.value;
+  }
+
+  function renderExplanation() {
+    const foreman = state?.foreman || {};
+    const explanation = foreman.explanation || {};
+    const headline = document.getElementById("explanation-headline");
+    headline.textContent = explanation.headline || "No plan change yet";
+    headline.classList.toggle("empty", !explanation.headline);
+    const changes = document.getElementById("explanation-changes");
+    changes.textContent = "";
+    for (const message of explanation.changes || []) {
+      const line = document.createElement("div");
+      line.className = "explanation-change";
+      line.textContent = message;
+      changes.append(line);
+    }
+    text("safety-line", explanation.safety || "");
+  }
+
+  function renderSummary() {
+    const foreman = state?.foreman || {};
+    const totals = foreman.totals || {};
+    const safety = foreman.safety || {};
+    text("summary-plan", `#${foreman.plan_no ?? "—"}`);
+    text("summary-safety", safety.passed == null ? "Pending" : safety.passed ? "Passed" : "Failed");
+    document.getElementById("summary-safety").className =
+      `summary-value ${safety.passed ? "good" : safety.passed === false ? "bad" : ""}`;
+    text("summary-jobs", `${totals.jobs_done ?? 0}/${(foreman.jobs || []).length}`);
+    const replanMs = foreman.explanation?.ms;
+    text("summary-replan", replanMs == null ? "—" : `${Number(replanMs).toFixed(1)} ms`);
+  }
+
   function renderState(nextState) {
     state = nextState;
     const farm = state.farm || {};
     text("farm-name", farm.name || "Foreman");
     text("clock", state.clock || "--:--");
     text("run-state", state.running ? "Running" : "Paused");
-    text("map-label", `${(farm.nodes || []).filter(node => node.kind === "field").length} fields · ${(state.foreman?.tractors || []).length} tractors`);
+    text("map-label", `${(farm.nodes || []).filter(node => node.kind === "field").length} fields · ${(state.foreman?.tractors || []).length} tractors · ${(farm.blocked || []).length} blocked`);
     text("raw-state", JSON.stringify(state, null, 2));
     const speed = document.getElementById("speed");
     if (state.speed != null && [...speed.options].some(option => Number(option.value) === Number(state.speed))) {
@@ -551,6 +696,9 @@
     }
     renderLists();
     renderBreakdownControl();
+    renderEventControls();
+    renderExplanation();
+    renderSummary();
   }
 
   async function poll() {
@@ -610,10 +758,54 @@
     }
   }
 
+  async function postEvent(payload, successMessage) {
+    const resultElement = document.getElementById("event-result");
+    resultElement.textContent = "";
+    resultElement.classList.remove("error");
+    try {
+      const response = await fetch("/api/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      if (!result.ok) throw new Error(result.error || "event was rejected");
+      resultElement.textContent = successMessage;
+      await poll();
+    } catch (error) {
+      resultElement.classList.add("error");
+      resultElement.textContent = error.message;
+    }
+  }
+
+  function changeRoad() {
+    const [a, b] = document.getElementById("road-select").value.split("|");
+    if (!a || !b) return;
+    const blocked = new Set((state?.farm?.blocked || []).map(road => edgeKey(road[0], road[1])));
+    const opening = blocked.has(edgeKey(a, b));
+    postEvent(
+      { type: opening ? "open_road" : "block_road", a, b },
+      opening ? `Road ${a}–${b} reopened` : `Road ${a}–${b} blocked and plan recalculated`,
+    );
+  }
+
+  function changePriority() {
+    const job = document.getElementById("priority-job").value;
+    const priority = Number(document.getElementById("priority-value").value);
+    if (!job) return;
+    postEvent({ type: "set_priority", job, priority }, `${job} changed to priority ${priority}`);
+  }
+
   document.querySelectorAll("button[data-action]").forEach(button => {
     button.addEventListener("click", () => control(button.dataset.action));
   });
   document.getElementById("break-button").addEventListener("click", breakTractor);
+  document.getElementById("road-button").addEventListener("click", changeRoad);
+  document.getElementById("road-select").addEventListener("change", renderEventControls);
+  document.getElementById("priority-button").addEventListener("click", changePriority);
+  document.getElementById("priority-job").addEventListener("change", renderEventControls);
+  document.getElementById("speed").addEventListener("change", () => control(null));
   new ResizeObserver(resizeCanvas).observe(canvas);
   window.addEventListener("resize", resizeCanvas);
 

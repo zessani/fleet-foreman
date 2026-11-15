@@ -79,9 +79,9 @@ Goal: the numbers and finish that make it feel like a real product.
 - [x] "Why?" for any job
 
 ### Ahmed
-- [ ] Proof run on many random farms
-- [ ] Blocked roads and changed priorities
-- [ ] Map polish
+- [x] Proof run on many random farms
+- [x] Blocked roads and changed priorities
+- [x] Map polish
 
 ### Vishva
 - [ ] Accuracy chart
