@@ -179,11 +179,29 @@ def test_the_ai_safety_agent_can_hold_a_job_for_thirty_minutes() -> None:
 
 
 def test_an_answer_for_a_plan_that_was_replaced_is_discarded() -> None:
-    model = ScriptedModel(safety=[CHAIN], delay_s=0.15)
+    import threading
+
+    gate = threading.Event()
+
+    class SlowFirstReview(ScriptedModel):
+        """The first review does not answer until the test lets it."""
+
+        def ask(self, system, prompt, tools, schema, timeout_s=AI_TIMEOUT_S) -> ModelReply:
+            first = not self.asked
+            reply = super().ask(system, prompt, tools, schema, timeout_s)
+            if first:
+                gate.wait(5)
+            return reply
+
+    model = SlowFirstReview(safety=[CHAIN])
     day = Day(example_raw(), ai=AiCrew(model))  # background calls, as on the live server
     assert day.ai_thinking() and day.foreman.plan_no == 1
     day.apply({"type": "set_priority", "job": "J4", "priority": 5})  # plan 2 replaces plan 1
-    time.sleep(0.5)
+    gate.set()
+    for _ in range(200):
+        if not day.ai_thinking():
+            break
+        time.sleep(0.01)
     day.drain_ai()
     first = day.desk.crew.calls[0]
     assert first.plan_no == 1 and "already been replaced" in first.applied
