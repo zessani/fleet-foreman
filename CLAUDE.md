@@ -135,7 +135,12 @@ Tools do the exact work, so plans are fast and never break a rule.
 | repaired | Recovery, Fleet, Navigation, Safety, dispatch |
 | road_blocked / road_opened | Navigation, Fleet, Navigation, Safety, dispatch |
 | priority_changed / job_added | Fleet, Navigation, Safety, dispatch |
+| drift (a job finished 15+ min behind plan) | Recovery, Fleet, Navigation, Safety, dispatch |
 | job_done / work_sample | Recovery (learn), no re-plan |
+
+Events seen in the same status reading share one re-plan. Recovery reads the
+tractor status feed once per simulated minute. A failure is a reported fault,
+or a tractor that says it is working but makes no progress for 5 minutes.
 
 **Memory, three kinds**
 - **World state:** where each tractor is, what is done, what is half done.
@@ -273,7 +278,8 @@ Shapes inside the state
 - `safety.passed` is `null` until the Safety gate has checked a plan.
 
 Event payloads for `POST /api/event`
-- `{"type": "breakdown", "tractor": "T2"}`
+- `{"type": "breakdown", "tractor": "T2"}`. Add `"silent": true` for a tractor
+  that keeps reporting "working" but stops making progress.
 - `{"type": "repair", "tractor": "T2"}`
 - `{"type": "block_road", "a": "X1", "b": "F1"}`
 - `{"type": "open_road", "a": "X1", "b": "F1"}`
@@ -281,7 +287,13 @@ Event payloads for `POST /api/event`
 - `{"type": "add_job", "job": {...a job as in section 8a...}}`
 
 The same shapes, plus `at` in minutes, are used in a farm file's `events` list.
-The reply is `{"ok": true}` or `{"ok": false, "error": "..."}`.
+The reply is `{"ok": true, "at": 94.2}` or `{"ok": false, "error": "..."}`.
+A breakdown or repair only changes the tractor. The Recovery agent notices it
+on the next status reading, so the clock must be running for the re-plan.
+A log line may also carry `data`, a small object with the numbers behind the
+message (for example `plan_no`, `ms`, `detection_min`).
+`explanation` also has `safety` (the Safety line) and the counts `moved`,
+`retimed`, `unchanged`, `held`.
 
 Report: `GET /api/report`
 ```json
@@ -295,7 +307,11 @@ Report: `GET /api/report`
 - `foreman` and `baseline` are `totals` objects. `difference` is Foreman minus baseline.
 - `main` is a full day run off screen with hidden speed factors off. It is the
   headline comparison. `with_hidden_factors` is the same day with them on.
-  `live` is the run on screen, which may still be in progress.
+  `live` is the run on screen, which may still be in progress. All three get
+  the same events, including ones sent to `POST /api/event`.
+- `replans` lists every dispatched plan of the live run:
+  `{t, plan_no, ms, events, moved, retimed, unchanged, held, detection_min}`.
+  `ms` is the time from the event reaching the Orchestrator to dispatch.
 
 Other endpoints
 - `POST /api/control` with `{action: start|pause|reset, speed}`
