@@ -402,6 +402,23 @@ Report: `GET /api/report`
   `ms` is the time from the event reaching the Orchestrator to dispatch.
 
 Other endpoints
+- `GET /api/learning/chart`: the five-day learning curve for the chart only,
+  `{seed, noise_pct, hidden_factors, days: [{day, gap_pct, samples, violations, jobs_done, on_time}], factors}`.
+  It uses its own seeded hidden factors (10 to 25% off the catalog rate per
+  field) and 3% day-to-day noise, with a fresh memory that is never saved, so
+  no other number depends on it. Sample farm, seed 7: 8.9%, 1.9%, 2.2%, 2.0%, 1.1%.
+
+Commands
+- `python -m foreman.server`: the app, on http://localhost:8000.
+- `python -m foreman.handin`: runs the full demo day off screen with the
+  scripted breakdown (no model, same result every time) and writes `handin/`:
+  `scenario.json`, `event_log.jsonl`, `comparison.md` and `.json`,
+  `explanations.md`, `README.md`.
+- `python -m foreman.lessons reset | seed | show`: puts the AI agents' lessons
+  file in a known state before a demo (empty, or one earlier day of lessons).
+  Press Reset on the dashboard afterwards.
+- `python -m foreman.sweep`: the comparison across every test day.
+
 - `POST /api/control` with `{action: start|pause|reset, speed}`
 - `POST /api/scenario` with `{name}` to load a farm file
 - `POST /api/event` with `{type: breakdown|repair|block_road|open_road|set_priority|add_job, ...}`
