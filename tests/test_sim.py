@@ -110,7 +110,8 @@ def test_totals_shape_and_jobs_done():
     sim.advance(100)
     totals = sim.totals()
     assert set(totals) == {"jobs_done", "on_time", "travel_min", "idle_min", "unassigned_min",
-                           "service_min", "working_share", "km", "violations"}
+                           "service_min", "wasted_min", "finish_min", "working_share", "km",
+                           "violations"}
     assert totals["jobs_done"] == 2 and totals["on_time"] == 1
     assert sim.all_done() is False
     assert totals["km"] == pytest.approx(10.0, abs=0.1)

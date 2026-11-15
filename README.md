@@ -32,12 +32,12 @@ We use our own simulator. One tractor is planned to be mirrored in AgOpenWeb (se
 | foreman/ | Zayyan | planner, simulation, agents, memory, safety, server |
 | foreman/nav/ | Ahmed | road routing |
 | web/ | Ahmed | dashboard page and farm map |
-| web/panels/ | Vishwa | numbers panel, why panel, accuracy chart |
+| web/panels/ | Vishva | numbers panel, why panel, accuracy chart |
 | bridge/ | Ahmed | AgOpenGPS link |
-| scenarios/ | Vishwa | farm files |
-| tools/ | Vishwa | farm checker, random farm maker, exports |
+| scenarios/ | Vishva | farm files |
+| tools/ | Vishva | farm checker, random farm maker, exports |
 | tests/ | all | each person tests their own part |
-| docs/ | Vishwa | deck, architecture diagram, README assets |
+| docs/ | Vishva | deck, architecture diagram, README assets |
 
 ## Working rules
 

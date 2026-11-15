@@ -435,13 +435,18 @@ class Simulation:
         done = [j for j in self.jobs.values() if j.status == "done"]
         on_time = sum(1 for j in done if j.done_at <= self.farm.jobs[j.id].deadline)
         busy = sum(total.get(k, 0.0) for k in ("work", "travel", "wait", "service"))
+        idle = total.get("idle", 0.0) + total.get("wait", 0.0)
+        # When the last job finished, or the time so far while jobs remain.
+        finish = max((j.done_at for j in done), default=0.0) if not self.open_jobs() else self.now
         return {
             "jobs_done": len(done),
             "on_time": on_time,
             "travel_min": round(total.get("travel", 0.0), 1),
-            "idle_min": round(total.get("idle", 0.0) + total.get("wait", 0.0), 1),
+            "idle_min": round(idle, 1),
             "unassigned_min": round(total.get("unassigned", 0.0), 1),
             "service_min": round(total.get("service", 0.0), 1),
+            "wasted_min": round(total.get("travel", 0.0) + idle + total.get("service", 0.0), 1),
+            "finish_min": round(finish, 1),
             "working_share": round(100.0 * total.get("work", 0.0) / busy, 1) if busy else 0.0,
             "km": round(sum(t.km for t in self.tractors.values()), 1),
             "violations": len(self.violations),

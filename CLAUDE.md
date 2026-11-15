@@ -8,7 +8,7 @@ people, each running their own Claude Code session on the same repo.
 - **Event:** Hack Arizona AgX hackathon, Tucson, Sunday Nov 15, 2026.
 - **Challenge:** "Run the Fleet", presented by American Tractor Company (ATC).
 - **Hard deadline:** hand-in at **5:00 PM today**. Code freeze at 4:00 PM.
-- **Team:** Zayyan, Ahmed, Vishwa. See section 9 for who owns what.
+- **Team:** Zayyan, Ahmed, Vishva. See section 9 for who owns what.
 - **Goal:** win. Build one complete flow that works without a stumble, and
   prove it with numbers. Few things done very well beat many things.
 
@@ -250,6 +250,7 @@ class TractorAdapter(Protocol):
     "plan_no": 3,
     "totals": {"jobs_done": 4, "on_time": 4, "travel_min": 61, "idle_min": 12,
                "unassigned_min": 40, "service_min": 25,
+               "wasted_min": 98, "finish_min": 402,
                "working_share": 78.5, "km": 24.1, "violations": 0},
     "explanation": {"headline": "...", "summary": "...", "changes": [], "ms": 38},
     "safety": {"passed": true, "checks": []},
@@ -357,12 +358,12 @@ Notes
 foreman/            Zayyan   planner, simulation, agents, memory, safety, server
 foreman/nav/        Ahmed    road routing
 web/                Ahmed    dashboard page and farm map
-web/panels/         Vishwa   numbers panel, why panel, accuracy chart
+web/panels/         Vishva   numbers panel, why panel, accuracy chart
 bridge/             Ahmed    AgOpenGPS link
-scenarios/          Vishwa   farm files
-tools/              Vishwa   farm checker, random farm maker, exports
+scenarios/          Vishva   farm files
+tools/              Vishva   farm checker, random farm maker, exports
 tests/              all      each person tests their own part
-docs/               Vishwa   deck, architecture diagram, README assets
+docs/               Vishva   deck, architecture diagram, README assets
 ```
 
 **At the start of each session, ask which teammate you are working with**, and
@@ -453,6 +454,8 @@ Measured on the same farm with the same events, Foreman against the baseline.
 | Idle minutes | A tractor with no task while there is unfinished work it could do (it has the right implement, the job is released, its predecessor is done, and nobody is already working it), plus minutes waiting at a field |
 | Unassigned minutes | A working tractor with no task while any job remains, whether or not it could do that job. Always at least the no-task part of idle |
 | Yard service minutes | Time spent on implement swaps and refuels |
+| Wasted minutes | Travel + idle + yard service. Machine time that covered no ground |
+| Day finish time | The minute the last job finished (the time so far while jobs remain) |
 | Re-plan time | Milliseconds from event to dispatched plan |
 | Rule violations | Count from the referee. Target is zero |
 | Estimate error by day | How far predicted job times were from actual (learning loop) |
@@ -463,7 +466,7 @@ Measured on the same farm with the same events, Foreman against the baseline.
 No breakdowns yet.
 - Zayyan: planner, simulation loop, baseline.
 - Ahmed: road routing, farm map with tractors moving and field progress.
-- Vishwa: sample farm file (3 tractors, 8 fields, 10 jobs), farm checker
+- Vishva: sample farm file (3 tractors, 8 fields, 10 jobs), farm checker
   script, numbers panel.
 
 **Done when:** `python -m foreman.server` starts with the sample farm loaded.
@@ -475,7 +478,7 @@ reports zero violations. Foreman beats the baseline on travel and idle time.
   plain-language explanation of each re-plan.
 - Ahmed: AgOpenGPS link driving one tractor, "break this tractor" control,
   breakdown test cases.
-- Vishwa: random farm maker, export of event log and comparison, small rule tests.
+- Vishva: random farm maker, export of event log and comparison, small rule tests.
 
 **Done when:** breaking any tractor at any time leads to a new plan with no
 human. Finished work is kept. A half-done field is finished once. The Safety
@@ -485,7 +488,7 @@ in AgOpenGPS.
 ### Phase 3: learning, proof, polish (3:00 to 4:00)
 - Zayyan: learning loop, LLM layer, "Why?" for any job.
 - Ahmed: proof run over random farms, blocked road and priority events, map polish.
-- Vishwa: accuracy chart, "Why?" panel, README.
+- Vishva: accuracy chart, "Why?" panel, README.
 
 **Done when:** the proof run reports violations, travel, idle, and re-plan
 time across at least 200 random farms. The accuracy chart shows estimate

@@ -21,7 +21,7 @@ Goal: a starter repo that runs, so everyone can build on it.
 - [ ] AgOpenWeb installed and opens on a Mac
 - [x] Routing interface (section 8d) agreed
 
-### Vishwa
+### Vishva
 - [ ] Repo cloned and server runs
 - [ ] Asked organizer: hand-in at 5:00 or 5:30?
 
@@ -39,7 +39,7 @@ is broken, and we beat "first come, first served".
 - [x] Shortest routes and travel times
 - [x] Farm map with tractors moving and field progress
 
-### Vishwa
+### Vishva
 - [ ] Sample farm file: 3 tractors, 8 fields, 10 jobs
 - [ ] Farm file checker
 - [ ] Numbers panel
@@ -62,7 +62,7 @@ Done when: we can break any tractor and the plan repairs with no human.
 - [ ] "Break this tractor" button
 - [ ] Breakdown test cases
 
-### Vishwa
+### Vishva
 - [ ] Random farm maker
 - [ ] Export event log and comparison numbers
 - [ ] Tests for the basic rules
@@ -83,7 +83,7 @@ Goal: the numbers and finish that make it feel like a real product.
 - [ ] Blocked roads and changed priorities
 - [ ] Map polish
 
-### Vishwa
+### Vishva
 - [ ] Accuracy chart
 - [ ] "Why?" panel
 - [ ] Screenshots and numbers in the deck
@@ -101,7 +101,7 @@ Goal: the numbers and finish that make it feel like a real product.
 - [ ] Hand-in files checked
 - [ ] Ready for questions on the link and tests
 
-### Vishwa
+### Vishva
 - [ ] Backup video recorded
 - [ ] Deck final
 - [ ] Submitted at 4:50

@@ -17,4 +17,5 @@ Planner, simulation, agents, memory, safety and server.
 - `memory.py`: the event log (JSON Lines, saved to `runs/event_log.jsonl`) and incident record.
 - `sim.py`: simulated tractors behind the interface in `adapter.py`, plus the referee.
 - `model.py`: farm data model, loader, and the formulas of section 10. `state.py`: state and plan types.
+- `sweep.py`: `python -m foreman.sweep` re-runs the idle-weight comparison across every test day.
 - `nav/`: road routing (Ahmed).
