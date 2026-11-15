@@ -197,9 +197,9 @@
     const checks = el("div");
     safety.body.append(badge, safetyLine, checks);
 
-    const reasoning = card("AI agents");
+    const reasoning = card("AI agents", false, true);
     const reasoningBody = el("div");
-    reasoning.box.append(reasoningBody);
+    reasoning.body.append(reasoningBody);
 
     const log = card("Activity log", true, true);
     const logBody = el("div", "dp-log");
@@ -408,7 +408,12 @@
     const calls = Array.isArray(reasoningState) ? reasoningState.slice(0, 10) : [];
     if (!changed("reasoning", JSON.stringify([ai, calls]))) return;
 
-    parts.reasoningNote.textContent = "";
+    // The folded card still says the one thing that matters: the latest answer and what was done.
+    const latest = calls.length && calls[0] && typeof calls[0] === "object" ? calls[0] : null;
+    parts.reasoningNote.textContent = !ai.enabled ? "Off"
+      : ai.thinking ? "Thinking…"
+      : latest ? String(latest.agent || "AI agent") + ": " + (latest.applied || "no answer")
+      : "Not asked yet";
     const body = parts.reasoningBody;
     body.textContent = "";
     if (!ai.enabled) {

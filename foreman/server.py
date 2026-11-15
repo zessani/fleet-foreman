@@ -222,6 +222,15 @@ def _note_request(request: Request, kind: str, body: dict, reply: dict) -> None:
         pass  # a full disk must not stop the day
 
 
+@app.middleware("http")
+async def fresh_pages(request: Request, call_next):
+    """The dashboard files are always checked for a newer copy, so a browser never shows an old page."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # Mounted last so the /api routes above win over the static files.
 app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
