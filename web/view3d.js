@@ -964,8 +964,8 @@ const STRIPE = {
                                 g.fillStyle = i % 2 ? "rgba(30,18,8,0.30)" : "rgba(30,18,8,0.42)"; g.fillRect(x, y, w, h);
                                 g.fillStyle = "rgba(20,12,6,0.55)"; g.fillRect(x, y + h - 1.5, w, 1.5); },
   plant: (g, x, y, w, h, i) => { soil(g, "plant", "#66503a", x, y, w, h);
-                                 g.fillStyle = i % 2 ? "rgba(70,48,28,0.30)" : "rgba(70,48,28,0.40)"; g.fillRect(x, y, w, h);
-                                 g.fillStyle = "rgba(40,28,16,0.75)"; const n = Math.max(2, Math.round(h / 4));
+                                 g.fillStyle = i % 2 ? "rgba(70,48,28,0.10)" : "rgba(70,48,28,0.18)"; g.fillRect(x, y, w, h);
+                                 g.fillStyle = "rgba(48,34,20,0.5)"; const n = Math.max(2, Math.round(h / 4));
                                  for (let k = 0; k < n; k++) g.fillRect(x, y + (k + 0.5) * h / n, w, 1.4); },
   mow: (g, x, y, w, h, i) => { soil(g, "mow", "#bac878", x, y, w, h);
                                g.fillStyle = i % 2 ? "rgba(196,210,120,0.42)" : "rgba(170,190,100,0.42)"; g.fillRect(x, y, w, h);
