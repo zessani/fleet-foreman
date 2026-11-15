@@ -357,22 +357,38 @@ function drawCrop(g, S, crop) {
   g.strokeStyle = "#5b4630"; g.lineWidth = 6; g.strokeRect(3, 3, S - 6, S - 6);   // field edge
 }
 
-// Free what the last farm's scene held. Materials and geometry that the model
-// modules cache and share are left alone; they are reused by the next farm.
+// Free everything a subtree holds on the GPU, and its labels. The downloaded
+// textures themselves are kept, since the next farm uses them again. Geometry and
+// materials that the model modules share are simply uploaded again when next drawn.
+const KEEP_TEXTURES = new Set([...Object.values(TEX).flatMap((set) => Object.values(set)), ROAD_MAP, ENV].filter(Boolean));
+function freeTree(root) {
+  if (!root) return;
+  root.traverse((o) => {
+    if (o.isCSS2DObject) o.element.remove();
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    if (o.isInstancedMesh) o.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      for (const key of ["map", "normalMap", "roughnessMap"]) if (m[key] && !KEEP_TEXTURES.has(m[key])) m[key].dispose();
+      m.dispose();
+    }
+  });
+}
+
 function clearFarm() {
-  for (const field of Object.values(fields)) {
-    field.tag.remove();
-    for (const mesh of [field.mesh, field.flash]) { mesh.geometry.dispose(); mesh.material.dispose(); }
-    field.texture.dispose();
-  }
+  for (const field of Object.values(fields)) { freeTree(field.mesh); freeTree(field.flash); }
   for (const mesh of roadMeshes) mesh.geometry.dispose();
-  for (const object of perFarm) {
-    object.traverse((o) => { if (o.isMesh && !o.userData.shared) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
-  }
+  for (const object of perFarm) freeTree(object);
+  freeTree(yard);
+  freeTree(barrierGroup);
+  barrierGroup.clear();
+  barrierKey = null;
   perFarm = [];
+  envMaterials.clear();
   world.clear();
 }
 let perFarm = [];   // dressing and scrub, built for one farm
+let barrierKey = null;
 
 function buildFarm(farm) {
   clearFarm();
@@ -535,6 +551,10 @@ function buildRoads(farm, width) {
 }
 
 function buildBarriers(blocked) {
+  const key = JSON.stringify(blocked || []);
+  if (key === barrierKey) return;
+  barrierKey = key;
+  freeTree(barrierGroup);
   barrierGroup.clear();
   for (const [a, b] of blocked || []) {
     if (!nodes[a] || !nodes[b]) continue;
@@ -725,6 +745,7 @@ function updateParked(state) {
   if (!yard || yard.userData.parkedKey === key) return;
   yard.userData.parkedKey = key;
   const lot = yard.userData.parked;
+  freeTree(lot);
   lot.clear();
   let z = 14;
   for (const id of parked) {
@@ -862,7 +883,7 @@ function makeTractor(t) {
 function setImplement(view, id, catalog) {
   if (view.mounted === id) return;
   view.mounted = id;
-  if (view.implement) view.inner.remove(view.implement);
+  if (view.implement) { view.inner.remove(view.implement); freeTree(view.implement); }
   const spec = catalog[id];
   view.implement = spec ? implementModel(spec.type, spec.width) : null;
   if (view.implement) view.inner.add(view.implement);
@@ -1117,8 +1138,8 @@ function applyState(next) {
     farmKey = key;
     buildFarm(next.farm);
     for (const id of Object.keys(tractors)) {
-      tractors[id].tag.remove();
-      tractors[id].puffs.dispose();
+      freeTree(tractors[id].group);
+      freeTree(tractors[id].puffs);
       tractorLayer.remove(tractors[id].group, tractors[id].puffs);
       delete tractors[id];
     }
