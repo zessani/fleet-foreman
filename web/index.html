@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="visitor.js"></script>
 <title>Foreman</title>
 <style>
   /* Colour means two things only: a tractor's own colour (from the state), and red for
@@ -99,6 +100,9 @@
   }
   .status.attention { border-color: var(--attention); }
   .status-main { flex: 1; min-width: 280px; }
+  .demo-note { margin: 0 16px 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+               background: var(--panel-2); color: var(--muted); font-size: 14px; }
+  .demo-note[hidden] { display: none; }
   .status-word { font-size: 26px; font-weight: 750; line-height: 1.2; }
   .status.attention .status-word { color: var(--attention); }
   .status-last { margin-top: 4px; color: var(--muted); font-size: 16px; }
@@ -235,6 +239,7 @@
     </details>
   </div>
 </header>
+<div id="demo-note" class="demo-note" hidden>Public demo. This farm day is yours alone; it is cleared after 5 minutes away. The two AI agents are off here, so every decision comes from FleetForeman's fixed rules.</div>
 <div id="control-error" class="control-error" role="status"></div>
 
 <section class="panel status" id="banner" aria-label="Farm status">
@@ -1084,6 +1089,7 @@
       if (!online) document.querySelectorAll(".controls button, .controls select").forEach(control => { control.disabled = false; });
       setConnected(true, "");
       renderState(nextState);
+      document.getElementById("demo-note").hidden = !nextState.demo;
     } catch (error) {
       showOffline();
     } finally {
