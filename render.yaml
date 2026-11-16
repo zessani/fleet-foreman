@@ -1,0 +1,13 @@
+# Render blueprint for the FleetForeman public demo: one free web service built from the Dockerfile.
+services:
+  - type: web
+    name: fleetforeman
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeployTrigger: "off"
+    envVars:
+      - key: FOREMAN_DEMO
+        value: "1"
