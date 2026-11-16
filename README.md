@@ -1,8 +1,8 @@
 # FleetForeman
 
-**Live demo: https://fleetforeman.onrender.com** (3D view: https://fleetforeman.onrender.com/view3d.html). Ctrl-click, or ⌘-click on a Mac, to open it in a new tab.
+**Live demo: https://fleetforeman.onrender.com** (3D view: https://fleetforeman.onrender.com/view3d.html).
 
-FleetForeman is an autonomous fleet coordinator for driverless tractors: it assigns every job, picks the right implement and routes each machine, with zero humans in the loop. When a tractor breaks down mid-field, it re-plans in milliseconds, safety-checks the new plan and explains it in plain words.
+FleetForeman is an autonomous fleet coordinator for driverless tractors. It assigns every job, picks the right implement and routes each machine, with zero humans in the loop. When a tractor breaks down mid-field, it re-plans in milliseconds, safety-checks the new plan and explains it in plain words.
 
 ## For the judges
 
