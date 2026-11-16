@@ -45,7 +45,11 @@ def visitor_id(header: str | None, cookie: str | None) -> tuple[bool, str]:
 
 
 def client_address(headers, peer: str | None) -> str:
-    """The visitor's address. Behind the host's proxy it is the last address the proxy added."""
+    """The visitor's address. Behind the host's proxy (Cloudflare in front of Render) it is the
+    header the proxy sets and overwrites; otherwise the last address a proxy added."""
+    for name in ("cf-connecting-ip", "true-client-ip"):
+        if headers.get(name):
+            return headers[name].strip()
     forwarded = headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[-1].strip() or (peer or "?")

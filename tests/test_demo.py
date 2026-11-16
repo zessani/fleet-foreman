@@ -100,6 +100,7 @@ def test_visitor_ids_and_addresses():
     assert not known and len(fresh) >= 16
     assert client_address({"x-forwarded-for": "9.9.9.9, 10.0.0.1"}, "127.0.0.1") == "10.0.0.1"
     assert client_address({}, "127.0.0.1") == "127.0.0.1"
+    assert client_address({"cf-connecting-ip": "8.8.8.8", "x-forwarded-for": "1.1.1.1"}, None) == "8.8.8.8"
 
 
 # ---- the real server, both ways -------------------------------------------------------
