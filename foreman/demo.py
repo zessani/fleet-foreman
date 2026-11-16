@@ -34,6 +34,7 @@ LIMITED_PATHS = ("/api/control", "/api/event", "/api/scenario", "/api/scenario/r
                  "/api/report", "/api/learning/run")
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{8,64}")
 TOO_FAST = "Too many requests. Wait a few seconds and try again."
+TOO_MANY_NEW = "Too many new demo days from your network. Try again in a few minutes."
 
 
 def visitor_id(header: str | None, cookie: str | None) -> tuple[bool, str]:
@@ -106,7 +107,7 @@ class Visitors:
                         and self._changes_visitor.allow(visitor, now)):
                     return 429, TOO_FAST
             if visitor not in self._days and not self._new_days.allow(address, now):
-                return 429, TOO_FAST
+                return 429, TOO_MANY_NEW
         return None
 
     def engine(self, visitor: str, address: str = "?"):

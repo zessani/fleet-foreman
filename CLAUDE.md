@@ -459,6 +459,11 @@ Other endpoints
 
 Commands
 - `python -m foreman.server`: the app, on http://localhost:8000.
+- Public demo: `FOREMAN_DEMO=1` (off by default; `foreman/demo.py`). One day per visitor (id kept in
+  the browser by `web/visitor.js`), idle days dropped after 5 minutes, at most 40 at once, changes
+  rate-limited, AI agents, self-tune and off-screen learning runs off, `.env` never read. The
+  `Dockerfile` turns it on; it is live on Render's free plan at https://fleetforeman.onrender.com
+  (`render deploys create srv-dbt9ou56e07s73brhee0 --wait` redeploys main; auto-deploy is off).
 - `python -m foreman.handin`: runs the full demo day off screen with the
   scripted breakdown (no model, same result every time) and writes `handin/`:
   `scenario.json`, `event_log.jsonl`, `comparison.md` and `.json`,

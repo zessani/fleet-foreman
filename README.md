@@ -1,5 +1,9 @@
 # FleetForeman
 
+**Live demo: https://fleetforeman.onrender.com** (3D view: https://fleetforeman.onrender.com/view3d.html)
+
+Each visitor gets their own farm day. The two AI agents are off in the public demo, so every decision there comes from the rules. On the free plan the first visit after a quiet spell takes about a minute to wake up.
+
 ## For the judges
 
 | Hand-in item | Link |
@@ -49,8 +53,8 @@ No person has to approve anything. Every plan is checked against fixed safety ru
 Tested on a clean clone with Python 3.11.
 
 ```
-git clone https://github.com/zessani/hackagx.git
-cd hackagx
+git clone https://github.com/zessani/fleet-foreman.git
+cd fleet-foreman
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
