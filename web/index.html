@@ -204,6 +204,7 @@
       <option value="60">60× speed</option>
     </select>
     <a class="button" href="view3d.html">3D view</a>
+    <button id="new-demo" title="Back to the demo farm at 06:00, paused">New demo</button>
     <details class="menu" id="more-menu">
       <summary>More</summary>
       <div class="menu-body">
@@ -1229,6 +1230,15 @@
   document.getElementById("speed").addEventListener("change", () => control(null));
   document.getElementById("scenario").addEventListener("change", event => {
     if (!event.target.selectedOptions[0]?.dataset.other) loadFarm("/api/scenario", { name: event.target.value });
+  });
+  // One click puts everything back for the next visitor: demo farm, 06:00, paused, panels closed.
+  document.getElementById("new-demo").addEventListener("click", async () => {
+    await loadFarm("/api/scenario", { name: "sample_farm" });
+    await control("pause");
+    document.getElementById("detail").open = false;
+    document.getElementById("more-menu").open = false;
+    selectTab("side", "tractors");
+    window.scrollTo(0, 0);
   });
   document.getElementById("random-farm").addEventListener("click", () => loadFarm("/api/scenario/random", {}));
   document.getElementById("job-filter").addEventListener("change", () => { if (state) renderJobs(state.foreman || {}); });
