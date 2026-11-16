@@ -1,6 +1,6 @@
 # FleetForeman
 
-**Live demo: https://fleetforeman.onrender.com** (3D view: https://fleetforeman.onrender.com/view3d.html)
+**Live demo: https://fleetforeman.onrender.com** (3D view: https://fleetforeman.onrender.com/view3d.html). Ctrl-click, or ⌘-click on a Mac, to open it in a new tab.
 
 Each visitor gets their own farm day. The two AI agents are off in the public demo, so every decision there comes from the rules. On the free plan the first visit after a quiet spell takes about a minute to wake up.
 
